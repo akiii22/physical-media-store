@@ -2,6 +2,11 @@ import { Router } from "express";
 import multer from "multer";
 
 import {
+  requireAuth,
+  requireAdmin,
+} from "../middleware/authMiddleware";
+
+import {
   uploadPaymentProof,
   getPendingPayments,
   verifyPayment,
@@ -43,6 +48,8 @@ router.post(
 // Get payments waiting for verification
 router.get(
   "/pending",
+  requireAuth,
+  requireAdmin,
   getPendingPayments
 );
 
@@ -50,6 +57,8 @@ router.get(
 // Verify payment
 router.patch(
   "/:paymentId/verify",
+  requireAuth,
+  requireAdmin,
   verifyPayment
 );
 
@@ -57,6 +66,8 @@ router.patch(
 // Reject payment
 router.patch(
   "/:paymentId/reject",
+   requireAuth,
+  requireAdmin,
   rejectPayment
 );
 

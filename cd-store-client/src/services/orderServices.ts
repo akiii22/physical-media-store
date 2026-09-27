@@ -1,9 +1,9 @@
 import type { CartItem } from "../types/cart";
+import { supabase } from "../lib/supabase";
 
 const API_URL = "http://localhost:3000/api";
 
 type CreateOrderData = {
-  user_id: string;
   customer_name: string;
   phone: string;
   province?: string;
@@ -28,15 +28,31 @@ type CreateOrderResponse = {
 export const createOrder = async (
   orderData: CreateOrderData
 ): Promise<CreateOrderResponse> => {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.access_token) {
+    throw new Error("You must be logged in to place an order.");
+  }
+
   const response = await fetch(`${API_URL}/orders`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      Authorization: `Bearer ${session.access_token}`,
     },
     body: JSON.stringify({
-      ...orderData,
+      customer_name: orderData.customer_name,
+      phone: orderData.phone,
+      province: orderData.province,
+      city: orderData.city,
+      barangay: orderData.barangay,
+      street_address: orderData.street_address,
+      postal_code: orderData.postal_code,
+      delivery_method: orderData.delivery_method,
+      payment_method: orderData.payment_method,
 
-      // Only send the information the backend needs
       items: orderData.items.map((item) => ({
         product_id: item.product.id,
         quantity: item.quantity,
@@ -81,8 +97,21 @@ export type OrderDetails = {
 export const getOrderById = async (
   orderId: string
 ): Promise<OrderDetails> => {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.access_token) {
+    throw new Error("You must be logged in to view this order.");
+  }
+
   const response = await fetch(
-    `${API_URL}/orders/${orderId}`
+    `${API_URL}/orders/${orderId}`,
+    {
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    }
   );
 
   const data = await response.json();
@@ -94,4 +123,89 @@ export const getOrderById = async (
   }
 
   return data.data;
+};
+
+export const updateOrderStatus = async (
+  orderId: string,
+  status: string
+) => {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.access_token) {
+    throw new Error("Admin session not found.");
+  }
+
+  const response = await fetch(
+    `${API_URL}/orders/${orderId}/status`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        status,
+      }),
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data.message || "Failed to update order status."
+    );
+  }
+
+  return data;
+};
+
+export type ShipmentStatus =
+  | "PENDING"
+  | "READY_TO_SHIP"
+  | "SHIPPED"
+  | "DELIVERED";
+
+type UpdateShipmentData = {
+  courier: string;
+  tracking_number: string;
+  tracking_url: string;
+  status: ShipmentStatus;
+};
+
+export const updateShipment = async (
+  orderId: string,
+  shipmentData: UpdateShipmentData
+) => {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.access_token) {
+    throw new Error("Admin session not found.");
+  }
+
+  const response = await fetch(
+    `${API_URL}/orders/${orderId}/shipment`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify(shipmentData),
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data.message || "Failed to update shipment."
+    );
+  }
+
+  return data;
 };

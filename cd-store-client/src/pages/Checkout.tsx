@@ -22,7 +22,6 @@ const [submitting, setSubmitting] = useState(false);
   const subtotal = getCartSubtotal();
   const navigate = useNavigate();
 
-  const CUSTOMER_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 
 
   if (items.length === 0) {
@@ -63,7 +62,6 @@ const handleSubmit = async (
     setSubmitting(true);
 
     const result = await createOrder({
-      user_id: CUSTOMER_ID,
       customer_name: customerName,
       phone,
       province,
