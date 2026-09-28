@@ -1,7 +1,19 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import {
+  CheckCircle2,
+  Copy,
+  CreditCard,
+  FileCheck2,
+  FileImage,
+  Loader2,
+  Package,
+  ShoppingBag,
+  Upload,
+} from "lucide-react";
 
 import { useCart } from "../context/CartContext";
+
 import {
   getOrderById,
   type OrderDetails,
@@ -21,22 +33,21 @@ const OrderConfirmation = () => {
   const [file, setFile] = useState<File | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
-
   const [isUploading, setIsUploading] = useState(false);
 
   const [uploadSuccess, setUploadSuccess] = useState(false);
 
   const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
 
-
-  // ============================================================
-  // GET ORDER DETAILS
-  // ============================================================
+  /*
+   * ============================================================
+   * GET ORDER DETAILS
+   * ============================================================
+   */
 
   useEffect(() => {
     if (!orderId) {
-      setError("Order ID is missing.");
-      setIsLoading(false);
       return;
     }
 
@@ -62,17 +73,55 @@ const OrderConfirmation = () => {
     fetchOrder();
   }, [orderId]);
 
+  /*
+   * ============================================================
+   * INVALID ORDER ID
+   * ============================================================
+   */
 
-  // ============================================================
-  // FILE SELECTION
-  // ============================================================
+  if (!orderId) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-gray-50 px-6">
+        <div className="w-full max-w-md rounded-2xl bg-white p-8 text-center shadow-sm ring-1 ring-gray-200">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
+            <span className="text-2xl font-bold text-red-600">
+              !
+            </span>
+          </div>
+
+          <h1 className="mt-6 text-2xl font-bold text-gray-900">
+            Invalid Order
+          </h1>
+
+          <p className="mt-3 text-sm leading-6 text-gray-600">
+            No order number was provided.
+          </p>
+
+          <Link
+            to="/products"
+            className="mt-6 inline-flex items-center justify-center rounded-lg bg-gray-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-gray-700"
+          >
+            Back to Products
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
+  /*
+   * ============================================================
+   * FILE SELECTION
+   * ============================================================
+   */
 
   const handleFileChange = (
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
     const selectedFile = event.target.files?.[0];
 
-    if (!selectedFile) return;
+    if (!selectedFile) {
+      return;
+    }
 
     setError("");
     setUploadSuccess(false);
@@ -80,16 +129,43 @@ const OrderConfirmation = () => {
     // Maximum 5MB
     if (selectedFile.size > 5 * 1024 * 1024) {
       setError("File size must be 5MB or less.");
+      setFile(null);
+
       return;
     }
 
     setFile(selectedFile);
   };
 
+  /*
+   * ============================================================
+   * COPY ORDER ID
+   * ============================================================
+   */
 
-  // ============================================================
-  // UPLOAD PAYMENT PROOF
-  // ============================================================
+  const handleCopyOrderId = async () => {
+    if (!order?.order_id) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(order.order_id);
+
+      setCopied(true);
+
+      setTimeout(() => {
+        setCopied(false);
+      }, 2000);
+    } catch {
+      setError("Unable to copy the order number.");
+    }
+  };
+
+  /*
+   * ============================================================
+   * UPLOAD PAYMENT PROOF
+   * ============================================================
+   */
 
   const handleUpload = async () => {
     if (!orderId) {
@@ -108,20 +184,12 @@ const OrderConfirmation = () => {
 
       await uploadPaymentProof(orderId, file);
 
+      /*
+       * We don't modify the order object here.
+       *
+       * uploadSuccess controls the UI state instead.
+       */
       setUploadSuccess(true);
-
-      // Update local payment status
-      if (order) {
-        setOrder({
-          ...order,
-
-          payment: {
-            ...order.payment,
-            proof_url: "uploaded",
-          },
-        });
-      }
-
     } catch (error) {
       setError(
         error instanceof Error
@@ -133,436 +201,551 @@ const OrderConfirmation = () => {
     }
   };
 
-
-  // ============================================================
-  // LOADING
-  // ============================================================
+  /*
+   * ============================================================
+   * LOADING
+   * ============================================================
+   */
 
   if (isLoading) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-gray-100 px-6">
+      <main className="flex min-h-screen items-center justify-center bg-gray-50 px-6">
         <div className="text-center">
-          <p className="text-lg font-medium text-gray-900">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-gray-900">
+            <Loader2 className="h-6 w-6 animate-spin text-white" />
+          </div>
+
+          <h1 className="mt-5 text-lg font-semibold text-gray-900">
             Loading your order...
-          </p>
+          </h1>
 
           <p className="mt-2 text-sm text-gray-500">
-            Please wait.
+            Please wait while we retrieve your order details.
           </p>
         </div>
       </main>
     );
   }
 
-
-  // ============================================================
-  // ERROR
-  // ============================================================
+  /*
+   * ============================================================
+   * ERROR / ORDER NOT FOUND
+   * ============================================================
+   */
 
   if (!order) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-gray-100 px-6">
-        <div className="w-full max-w-xl rounded-2xl bg-white p-10 text-center shadow-sm">
-
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-100 text-2xl text-red-600">
-            !
+      <main className="flex min-h-screen items-center justify-center bg-gray-50 px-6">
+        <div className="w-full max-w-md rounded-2xl bg-white p-8 text-center shadow-sm ring-1 ring-gray-200">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
+            <span className="text-2xl font-bold text-red-600">
+              !
+            </span>
           </div>
 
           <h1 className="mt-6 text-2xl font-bold text-gray-900">
             Unable to Load Order
           </h1>
 
-          <p className="mt-3 text-gray-600">
+          <p className="mt-3 text-sm leading-6 text-gray-600">
             {error || "The order could not be found."}
           </p>
 
           <Link
             to="/products"
-            className="mt-6 inline-block rounded-lg bg-gray-900 px-5 py-3 font-medium text-white hover:bg-gray-700"
+            className="mt-6 inline-flex items-center justify-center rounded-lg bg-gray-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-gray-700"
           >
             Back to Products
           </Link>
-
         </div>
       </main>
     );
   }
 
+  /*
+   * ============================================================
+   * DISPLAY VALUES
+   * ============================================================
+   */
+
+  const orderStatus = order.status.replaceAll("_", " ");
+
+  const paymentStatus =
+    order.payment?.status || "PENDING";
+
+  const paymentMethod =
+    order.payment?.method || "N/A";
+
+  const paymentAmount = Number(
+    order.payment?.amount ?? order.total_amount
+  );
+
+  const hasPaymentProof =
+    Boolean(order.payment?.proof_url) || uploadSuccess;
+
+  /*
+   * ============================================================
+   * MAIN UI
+   * ============================================================
+   */
 
   return (
-    <main className="min-h-screen bg-gray-100 px-6 py-10">
+    <main className="min-h-screen bg-gray-50 px-4 py-8 sm:px-6 lg:py-12">
+      <div className="mx-auto w-full max-w-5xl">
 
-      <div className="mx-auto w-full max-w-xl">
+        {/* =====================================================
+            SUCCESS HEADER
+        ====================================================== */}
 
-
-        {/* ================================================== */}
-        {/* ORDER SUCCESS */}
-        {/* ================================================== */}
-
-        <div className="rounded-2xl bg-white p-8 text-center shadow-sm">
-
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-2xl text-green-600">
-            ✓
+        <section className="text-center">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-green-100">
+            <CheckCircle2 className="h-11 w-11 text-green-600" />
           </div>
 
-          <h1 className="mt-6 text-3xl font-bold text-gray-900">
-            Order Placed Successfully!
-          </h1>
-
-          <p className="mt-3 text-gray-600">
-            Thank you for your order.
+          <p className="mt-6 text-sm font-semibold uppercase tracking-wider text-green-600">
+            Order Confirmed
           </p>
 
+          <h1 className="mt-2 text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
+            Thank you for your order!
+          </h1>
 
-          {/* Order Number */}
+          <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-gray-600 sm:text-base">
+            Your order has been successfully placed.
+            Follow the payment instructions below to complete
+            your purchase.
+          </p>
+        </section>
 
-          <div className="mt-6 rounded-xl bg-gray-100 p-5">
+        {/* =====================================================
+            ORDER OVERVIEW
+        ====================================================== */}
 
-            <p className="text-sm text-gray-500">
-              Order Number
-            </p>
+        <section className="mt-8 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-gray-200">
+          <div className="border-b border-gray-100 px-6 py-5 sm:px-8">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                  Order Number
+                </p>
 
-            <p className="mt-1 break-all font-mono text-sm font-semibold text-gray-900">
-              {order.order_id}
-            </p>
+                <div className="mt-1 flex items-center gap-2">
+                  <p className="break-all font-mono text-sm font-semibold text-gray-900">
+                    {order.order_id}
+                  </p>
 
+                  <button
+                    type="button"
+                    onClick={handleCopyOrderId}
+                    className="shrink-0 rounded-md p-1.5 text-gray-500 transition hover:bg-gray-100 hover:text-gray-900"
+                    title="Copy order number"
+                  >
+                    {copied ? (
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+
+                {copied && (
+                  <p className="mt-1 text-xs text-green-600">
+                    Order number copied.
+                  </p>
+                )}
+              </div>
+
+              <span className="inline-flex w-fit rounded-full bg-yellow-100 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-yellow-700">
+                {orderStatus}
+              </span>
+            </div>
           </div>
 
-
-          {/* Total */}
-
-          <div className="mt-4 rounded-xl bg-gray-100 p-5">
-
-            <p className="text-sm text-gray-500">
-              Order Total
-            </p>
-
-            <p className="mt-1 text-2xl font-bold text-gray-900">
-              ₱{Number(order.total_amount).toLocaleString()}
-            </p>
-
-          </div>
-
-
-          {/* Order Status */}
-
-          <div className="mt-4">
-
-            <span className="inline-flex rounded-full bg-yellow-100 px-4 py-2 text-sm font-medium text-yellow-700">
-              {order.status.replaceAll("_", " ")}
-            </span>
-
-          </div>
-
-        </div>
-
-
-        {/* ================================================== */}
-        {/* PAYMENT INFORMATION */}
-        {/* ================================================== */}
-
-        <div className="mt-6 rounded-2xl bg-white p-8 shadow-sm">
-
-          <h2 className="text-xl font-bold text-gray-900">
-            Payment Information
-          </h2>
-
-
-          <div className="mt-5 rounded-xl bg-gray-100 p-5">
-
-            <div className="flex items-center justify-between">
-
-              <span className="text-sm text-gray-500">
+          <div className="grid divide-y divide-gray-100 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+            <div className="px-6 py-5 sm:px-8">
+              <p className="text-sm text-gray-500">
                 Payment Method
-              </span>
-
-              <span className="font-semibold text-gray-900">
-                {order.payment.method}
-              </span>
-
-            </div>
-
-
-            <div className="mt-4 flex items-center justify-between">
-
-              <span className="text-sm text-gray-500">
-                Amount
-              </span>
-
-              <span className="font-semibold text-gray-900">
-                ₱{Number(order.payment.amount).toLocaleString()}
-              </span>
-
-            </div>
-
-
-            <div className="mt-4 flex items-center justify-between">
-
-              <span className="text-sm text-gray-500">
-                Payment Status
-              </span>
-
-              <span className="font-semibold text-yellow-600">
-                {order.payment.status}
-              </span>
-
-            </div>
-
-          </div>
-
-
-          {/* ================================================== */}
-          {/* GCASH */}
-          {/* ================================================== */}
-
-          {order.payment.method === "GCASH" && (
-
-            <div className="mt-6 rounded-xl border border-gray-200 p-5">
-
-              <h3 className="text-lg font-semibold text-gray-900">
-                Pay with GCash
-              </h3>
-
-              <p className="mt-2 text-sm text-gray-600">
-                Send the exact amount to the store's GCash
-                account.
               </p>
 
+              <p className="mt-1 font-semibold text-gray-900">
+                {paymentMethod}
+              </p>
+            </div>
 
-              <div className="mt-4 rounded-lg bg-gray-100 p-4">
+            <div className="px-6 py-5 sm:px-8">
+              <p className="text-sm text-gray-500">
+                Order Total
+              </p>
 
-                <p className="text-xs text-gray-500">
-                  GCash Account
+              <p className="mt-1 text-2xl font-bold text-gray-900">
+                ₱{Number(order.total_amount).toLocaleString()}
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* =====================================================
+            WHAT HAPPENS NEXT
+        ====================================================== */}
+
+        <section className="mt-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-gray-200 sm:p-8">
+          <div className="flex items-start gap-4">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gray-100">
+              <Package className="h-5 w-5 text-gray-700" />
+            </div>
+
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">
+                What happens next?
+              </h2>
+
+              <p className="mt-1 text-sm text-gray-500">
+                Here's what you need to do to complete your order.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-6 grid gap-4 sm:grid-cols-3">
+            <div className="rounded-xl bg-gray-50 p-4">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-900 text-sm font-bold text-white">
+                1
+              </span>
+
+              <h3 className="mt-4 font-semibold text-gray-900">
+                Complete Payment
+              </h3>
+
+              <p className="mt-1 text-sm leading-5 text-gray-500">
+                Send the exact order amount using your selected
+                payment method.
+              </p>
+            </div>
+
+            <div className="rounded-xl bg-gray-50 p-4">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-900 text-sm font-bold text-white">
+                2
+              </span>
+
+              <h3 className="mt-4 font-semibold text-gray-900">
+                Upload Receipt
+              </h3>
+
+              <p className="mt-1 text-sm leading-5 text-gray-500">
+                Upload your payment screenshot or receipt below.
+              </p>
+            </div>
+
+            <div className="rounded-xl bg-gray-50 p-4">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-900 text-sm font-bold text-white">
+                3
+              </span>
+
+              <h3 className="mt-4 font-semibold text-gray-900">
+                Wait for Verification
+              </h3>
+
+              <p className="mt-1 text-sm leading-5 text-gray-500">
+                The store will verify your payment before
+                processing the order.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* =====================================================
+            PAYMENT INFORMATION
+        ====================================================== */}
+
+        <section className="mt-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-gray-200 sm:p-8">
+          <div className="flex items-start gap-4">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gray-100">
+              <CreditCard className="h-5 w-5 text-gray-700" />
+            </div>
+
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">
+                Payment Information
+              </h2>
+
+              <p className="mt-1 text-sm text-gray-500">
+                Complete your payment using the instructions below.
+              </p>
+            </div>
+          </div>
+
+          {/* Payment summary */}
+          <div className="mt-6 rounded-xl border border-gray-200 bg-gray-50 p-5">
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                  Method
                 </p>
 
                 <p className="mt-1 font-semibold text-gray-900">
+                  {paymentMethod}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                  Amount
+                </p>
+
+                <p className="mt-1 font-semibold text-gray-900">
+                  ₱{paymentAmount.toLocaleString()}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                  Status
+                </p>
+
+                <p className="mt-1 font-semibold text-yellow-600">
+                  {paymentStatus}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* GCash */}
+          {order.payment?.method === "GCASH" && (
+            <div className="mt-6 rounded-xl border border-gray-200 p-5">
+              <h3 className="font-semibold text-gray-900">
+                Pay with GCash
+              </h3>
+
+              <p className="mt-2 text-sm leading-6 text-gray-600">
+                Send the exact amount shown above to the store's
+                GCash account.
+              </p>
+
+              <div className="mt-4 rounded-xl bg-gray-50 p-5">
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                  GCash Account
+                </p>
+
+                <p className="mt-2 text-lg font-bold text-gray-900">
                   [CLIENT GCASH NUMBER]
                 </p>
 
                 <p className="mt-1 text-sm text-gray-600">
                   [CLIENT ACCOUNT NAME]
                 </p>
-
               </div>
-
             </div>
-
           )}
 
-
-          {/* ================================================== */}
-          {/* MAYA */}
-          {/* ================================================== */}
-
-          {order.payment.method === "MAYA" && (
-
+          {/* Maya */}
+          {order.payment?.method === "MAYA" && (
             <div className="mt-6 rounded-xl border border-gray-200 p-5">
-
-              <h3 className="text-lg font-semibold text-gray-900">
+              <h3 className="font-semibold text-gray-900">
                 Pay with Maya
               </h3>
 
-              <p className="mt-2 text-sm text-gray-600">
-                Send the exact amount to the store's Maya
-                account.
+              <p className="mt-2 text-sm leading-6 text-gray-600">
+                Send the exact amount shown above to the store's
+                Maya account.
               </p>
 
-
-              <div className="mt-4 rounded-lg bg-gray-100 p-4">
-
-                <p className="text-xs text-gray-500">
+              <div className="mt-4 rounded-xl bg-gray-50 p-5">
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
                   Maya Account
                 </p>
 
-                <p className="mt-1 font-semibold text-gray-900">
+                <p className="mt-2 text-lg font-bold text-gray-900">
                   [CLIENT MAYA NUMBER]
                 </p>
 
                 <p className="mt-1 text-sm text-gray-600">
                   [CLIENT ACCOUNT NAME]
                 </p>
-
               </div>
-
             </div>
-
           )}
 
-
-          {/* ================================================== */}
-          {/* CARD */}
-          {/* ================================================== */}
-
-          {order.payment.method === "CARD" && (
-
+          {/* Card */}
+          {order.payment?.method === "CARD" && (
             <div className="mt-6 rounded-xl border border-gray-200 p-5">
-
-              <h3 className="text-lg font-semibold text-gray-900">
+              <h3 className="font-semibold text-gray-900">
                 Pay with Credit / Debit Card
               </h3>
 
-              <p className="mt-2 text-sm text-gray-600">
-                Complete your card payment using the
-                store's payment provider.
+              <p className="mt-2 text-sm leading-6 text-gray-600">
+                Complete your card payment using the store's
+                payment provider.
               </p>
-
 
               <button
                 type="button"
                 disabled
-                className="mt-4 rounded-lg bg-gray-200 px-4 py-2 text-sm font-medium text-gray-500"
+                className="mt-4 rounded-lg bg-gray-100 px-4 py-2.5 text-sm font-medium text-gray-400"
               >
                 Payment Provider Link
               </button>
 
-
               <p className="mt-2 text-xs text-gray-500">
-                The payment provider link will be added once
-                the store provides the required details.
+                The payment provider link will be added once the
+                store provides the required details.
               </p>
+            </div>
+          )}
+        </section>
 
+        {/* =====================================================
+            PAYMENT PROOF
+        ====================================================== */}
+
+        <section className="mt-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-gray-200 sm:p-8">
+          <div className="flex items-start gap-4">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gray-100">
+              <FileCheck2 className="h-5 w-5 text-gray-700" />
             </div>
 
-          )}
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">
+                Payment Proof
+              </h2>
 
-        </div>
-
-
-        {/* ================================================== */}
-        {/* PAYMENT PROOF */}
-        {/* ================================================== */}
-
-        <div className="mt-6 rounded-2xl bg-white p-8 shadow-sm">
-
-          <h2 className="text-xl font-bold text-gray-900">
-            Upload Payment Proof
-          </h2>
-
-          <p className="mt-2 text-sm text-gray-600">
-            After completing your payment, upload your
-            receipt or payment screenshot.
-          </p>
-
-
-          {/* File Input */}
-
-          <div className="mt-5">
-
-            <label
-              htmlFor="payment-proof"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Payment Receipt
-            </label>
-
-
-            <input
-              id="payment-proof"
-              type="file"
-              accept="image/*,.pdf"
-              onChange={handleFileChange}
-              disabled={uploadSuccess}
-              className="mt-2 block w-full rounded-lg border border-gray-300 bg-white p-3 text-sm"
-            />
-
-
-            <p className="mt-2 text-xs text-gray-500">
-              Maximum file size: 5MB
-            </p>
-
+              <p className="mt-1 text-sm text-gray-500">
+                Upload your receipt or payment screenshot after
+                completing the payment.
+              </p>
+            </div>
           </div>
 
+          {hasPaymentProof ? (
+            <div className="mt-6 rounded-xl border border-green-200 bg-green-50 p-5">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
 
-          {/* Selected File */}
+                <div>
+                  <p className="font-semibold text-green-800">
+                    Payment proof submitted
+                  </p>
 
-          {file && (
-
-            <div className="mt-4 rounded-lg bg-gray-100 p-4">
-
-              <p className="text-sm font-medium text-gray-900">
-                Selected file
-              </p>
-
-              <p className="mt-1 break-all text-sm text-gray-600">
-                {file.name}
-              </p>
-
+                  <p className="mt-1 text-sm leading-5 text-green-700">
+                    Your receipt has been submitted and is waiting
+                    for verification by the store.
+                  </p>
+                </div>
+              </div>
             </div>
+          ) : (
+            <>
+              <label
+                htmlFor="payment-proof"
+                className="mt-6 flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 px-6 py-10 text-center transition hover:border-gray-900 hover:bg-gray-100"
+              >
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white shadow-sm">
+                  {file ? (
+                    <FileImage className="h-6 w-6 text-gray-700" />
+                  ) : (
+                    <Upload className="h-6 w-6 text-gray-700" />
+                  )}
+                </div>
 
+                <p className="mt-4 text-sm font-semibold text-gray-900">
+                  {file
+                    ? "Payment receipt selected"
+                    : "Upload your payment receipt"}
+                </p>
+
+                <p className="mt-1 text-sm text-gray-500">
+                  {file
+                    ? "Click to choose a different file"
+                    : "Click to browse your files"}
+                </p>
+
+                <p className="mt-3 text-xs text-gray-400">
+                  JPG, PNG, or PDF · Maximum 5MB
+                </p>
+
+                <input
+                  id="payment-proof"
+                  type="file"
+                  accept="image/*,.pdf"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+              </label>
+
+              {file && (
+                <div className="mt-4 flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white">
+                    <FileImage className="h-5 w-5 text-gray-600" />
+                  </div>
+
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-gray-900">
+                      {file.name}
+                    </p>
+
+                    <p className="mt-0.5 text-xs text-gray-500">
+                      {(file.size / 1024 / 1024).toFixed(2)} MB
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {error && (
+                <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4">
+                  <p className="text-sm font-medium text-red-700">
+                    {error}
+                  </p>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={handleUpload}
+                disabled={!file || isUploading}
+                className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-5 py-3 font-medium text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+              >
+                {isUploading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4" />
+                    Upload Payment Proof
+                  </>
+                )}
+              </button>
+            </>
           )}
+        </section>
 
+        {/* =====================================================
+            ACTIONS
+        ====================================================== */}
 
-          {/* Error */}
-
-          {error && (
-
-            <div className="mt-4 rounded-lg bg-red-50 p-4 text-sm text-red-600">
-              {error}
-            </div>
-
-          )}
-
-
-          {/* Success */}
-
-          {uploadSuccess && (
-
-            <div className="mt-4 rounded-lg bg-green-50 p-4 text-sm text-green-700">
-
-              Payment proof uploaded successfully.
-
-              <p className="mt-1 text-xs text-green-600">
-                Your payment is now waiting for verification
-                by the store.
-              </p>
-
-            </div>
-
-          )}
-
-
-          {/* Upload Button */}
-
-          <button
-            type="button"
-            onClick={handleUpload}
-            disabled={
-              !file ||
-              isUploading ||
-              uploadSuccess
-            }
-            className="mt-5 w-full rounded-lg bg-gray-900 px-5 py-3 font-medium text-white hover:bg-gray-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+        <section className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
+          <Link
+            to={`/my-orders/${order.order_id}`}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-6 py-3 font-medium text-white transition hover:bg-gray-700"
           >
-
-            {isUploading
-              ? "Uploading..."
-              : uploadSuccess
-              ? "Payment Proof Submitted"
-              : "Upload Payment Proof"}
-
-          </button>
-
-        </div>
-
-
-        {/* ================================================== */}
-        {/* CONTINUE SHOPPING */}
-        {/* ================================================== */}
-
-        <div className="mt-6 text-center">
+            <Package className="h-4 w-4" />
+            View My Order
+          </Link>
 
           <Link
             to="/products"
             onClick={clearCart}
-            className="inline-block rounded-lg bg-gray-900 px-5 py-3 font-medium text-white hover:bg-gray-700"
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-6 py-3 font-medium text-gray-700 transition hover:border-gray-900 hover:text-gray-900"
           >
+            <ShoppingBag className="h-4 w-4" />
             Continue Shopping
           </Link>
+        </section>
 
-        </div>
-
+        <p className="mt-6 pb-4 text-center text-xs leading-5 text-gray-400">
+          Keep your order number for future reference.
+          You can view your order status anytime from My Orders.
+        </p>
       </div>
-
     </main>
   );
 };

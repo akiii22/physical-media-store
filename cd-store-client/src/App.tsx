@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import Products from "./pages/Products";
 import ProductDetails from "./pages/ProductDetails";
@@ -8,68 +8,74 @@ import OrderConfirmation from "./pages/OrderConrimation";
 import AdminPayments from "./pages/AdminPayments";
 import Register from "./pages/Register";
 import Login from "./pages/Login";
-import { useAuth } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoutes";
 import AdminOrders from "./pages/AdminOrders";
 import MyOrders from "./pages/MyOrders";
 import MyOrderDetails from "./pages/MyOrderDetails";
+import Navbar from "./components/Navbar";
+import AdminLayout from "./components/admin/AdminLayout";
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminProducts from "./pages/admin/AdminProducts";
+import AddProduct from "./pages/admin/AddProduct";
+import EditProduct from "./pages/admin/EditProduct";
+import AdminManagement from "./pages/admin/AdminManagement";
+import AdminSettings from "./pages/admin/AdminSettings";
 
 const App = () => {
-  const { user, role, logout } = useAuth();
+  const location = useLocation();
 
-
-  const handleLogout = async () => {
-    try {
-      await logout();
-    } catch (error) {
-      console.error("Logout failed:", error);
-    }
-  };
+  const hideNavbar =
+    location.pathname === "/login" ||
+    location.pathname === "/register" ||
+    location.pathname.startsWith("/admin");
 
   return (
-    <div>
-      {user && (
-        <div className="flex items-center justify-end gap-4 border-b px-6 py-3">
-          <div className="text-sm">
-            <span>{user.email}</span>
+    <div className="min-h-screen bg-gray-50">
 
-            <span className="ml-2 rounded bg-gray-100 px-2 py-1 text-xs">
-              {role}
-            </span>
-          </div>
-
-          <button
-            onClick={handleLogout}
-            className="rounded bg-black px-4 py-2 text-sm text-white hover:bg-gray-800"
-          >
-            Logout
-          </button>
-        </div>
-      )}
+      {!hideNavbar && <Navbar />}
 
       <Routes>
-        <Route path="/" element={<Navigate to="/products" replace />} />
+        {/* Customer / Public Routes */}
+        <Route
+          path="/"
+          element={<Navigate to="/products" replace />}
+        />
 
-        <Route path="/products" element={<Products />} />
+        <Route
+          path="/products"
+          element={<Products />}
+        />
 
         <Route
           path="/products/:id"
           element={<ProductDetails />}
         />
 
-        <Route path="/cart" element={<Cart />} />
-
         <Route
-          element={<ProtectedRoute allowedRoles={["CUSTOMER"]} />}
+          path="/cart"
+          element={<Cart />}
+        />
+
+        {/* Customer Protected Routes */}
+        <Route
+          element={
+            <ProtectedRoute allowedRoles={["CUSTOMER"]} />
+          }
         >
-          <Route path="/checkout" element={<Checkout />} />
           <Route
-      path="/my-orders"
-      element={<MyOrders />}
-    />  <Route
-    path="/my-orders/:orderId"
-    element={<MyOrderDetails />}
-  />
+            path="/checkout"
+            element={<Checkout />}
+          />
+
+          <Route
+            path="/my-orders"
+            element={<MyOrders />}
+          />
+
+          <Route
+            path="/my-orders/:orderId"
+            element={<MyOrderDetails />}
+          />
         </Route>
 
         <Route
@@ -77,25 +83,68 @@ const App = () => {
           element={<OrderConfirmation />}
         />
 
-        <Route path="/register" element={<Register />} />
-
-        <Route path="/login" element={<Login />} />
+        {/* Authentication */}
+        <Route
+          path="/register"
+          element={<Register />}
+        />
 
         <Route
-          element={<ProtectedRoute allowedRoles={["ADMIN"]} />}
+          path="/login"
+          element={<Login />}
+        />
+
+        {/* Admin Routes */}
+        <Route
+          element={
+            <ProtectedRoute allowedRoles={["ADMIN"]} />
+          }
         >
-          <Route
-            path="/admin/payments"
-            element={<AdminPayments />}
-          />
-        </Route>
+          <Route element={<AdminLayout />}>
+            <Route
+              path="/admin"
+              element={<AdminDashboard />}
+            />
 
-        <Route
-    path="/admin/orders"
-    element={<AdminOrders />}
-  />
+            <Route
+              path="/admin/orders"
+              element={<AdminOrders />}
+            />
+
+            <Route
+              path="/admin/payments"
+              element={<AdminPayments />}
+            />
+
+            <Route 
+              path="/admin/products"
+              element={<AdminProducts />}
+            />
+
+            <Route 
+              path="/admin/products/new"
+              element={<AddProduct />}
+            />
+
+            <Route 
+              path="/admin/products/:id/edit"
+              element={<EditProduct />}
+            />
+
+            <Route 
+              path="/admin/admins"
+              element={<AdminManagement />}
+            />
+          </Route>
+
+          <Route 
+              path="/admin/settings"
+              element={<AdminSettings />}
+            />
+        </Route>
       </Routes>
     </div>
   );
 };
+
 export default App;
