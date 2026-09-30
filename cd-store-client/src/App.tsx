@@ -1,5 +1,6 @@
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Route, Routes, useLocation } from "react-router-dom";
 
+import Home from "./pages/Home";
 import Products from "./pages/Products";
 import ProductDetails from "./pages/ProductDetails";
 import Cart from "./pages/Cart";
@@ -31,14 +32,17 @@ const App = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-
       {!hideNavbar && <Navbar />}
 
       <Routes>
-        {/* Customer / Public Routes */}
+
+        {/* ================================================
+            CUSTOMER / PUBLIC ROUTES
+        ================================================= */}
+
         <Route
           path="/"
-          element={<Navigate to="/products" replace />}
+          element={<Home />}
         />
 
         <Route
@@ -56,7 +60,10 @@ const App = () => {
           element={<Cart />}
         />
 
-        {/* Customer Protected Routes */}
+        {/* ================================================
+            CUSTOMER PROTECTED ROUTES
+        ================================================= */}
+
         <Route
           element={
             <ProtectedRoute allowedRoles={["CUSTOMER"]} />
@@ -83,7 +90,10 @@ const App = () => {
           element={<OrderConfirmation />}
         />
 
-        {/* Authentication */}
+        {/* ================================================
+            AUTHENTICATION
+        ================================================= */}
+
         <Route
           path="/register"
           element={<Register />}
@@ -94,13 +104,17 @@ const App = () => {
           element={<Login />}
         />
 
-        {/* Admin Routes */}
+        {/* ================================================
+            ADMIN ROUTES
+        ================================================= */}
+
         <Route
           element={
             <ProtectedRoute allowedRoles={["ADMIN"]} />
           }
         >
           <Route element={<AdminLayout />}>
+
             <Route
               path="/admin"
               element={<AdminDashboard />}
@@ -116,32 +130,34 @@ const App = () => {
               element={<AdminPayments />}
             />
 
-            <Route 
+            <Route
               path="/admin/products"
               element={<AdminProducts />}
             />
 
-            <Route 
+            <Route
               path="/admin/products/new"
               element={<AddProduct />}
             />
 
-            <Route 
+            <Route
               path="/admin/products/:id/edit"
               element={<EditProduct />}
             />
 
-            <Route 
+            <Route
               path="/admin/admins"
               element={<AdminManagement />}
             />
-          </Route>
 
-          <Route 
+            <Route
               path="/admin/settings"
               element={<AdminSettings />}
             />
+
+          </Route>
         </Route>
+
       </Routes>
     </div>
   );
