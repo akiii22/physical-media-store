@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowRight, Disc3, Music, Package, Play, ArrowLeft } from "lucide-react";
+import { ArrowRight, Disc3, Music, Play, ArrowLeft } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { getProducts } from "../services/productServices";

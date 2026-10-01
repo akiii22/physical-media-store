@@ -31,7 +31,7 @@ router.post(
   "/",
   requireAuth,
   requireAdmin,
-  upload.single("image"),
+  upload.array("images", 5),
   createProduct
 );
 

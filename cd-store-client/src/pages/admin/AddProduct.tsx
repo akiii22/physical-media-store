@@ -1,4 +1,9 @@
 import { useEffect, useState } from "react";
+import type {
+  ChangeEvent,
+  DragEvent,
+  FormEvent,
+} from "react";
 
 import {
   ArrowLeft,
@@ -16,6 +21,15 @@ import {
 
 import type { Category } from "../../types/product";
 
+const MAX_IMAGES = 5;
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
+
+const ALLOWED_IMAGE_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+];
+
 const AddProduct = () => {
   const navigate = useNavigate();
 
@@ -24,8 +38,15 @@ const AddProduct = () => {
   // ==========================================
 
   const [categories, setCategories] = useState<Category[]>([]);
-  const [image, setImage] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+
+  // Actual selected image files.
+  const [images, setImages] = useState<File[]>([]);
+
+  // Temporary browser preview URLs.
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+
+  // Drag-and-drop visual state.
+  const [isDragging, setIsDragging] = useState(false);
 
   const [isLoadingCategories, setIsLoadingCategories] =
     useState(true);
@@ -70,9 +91,7 @@ const AddProduct = () => {
           ])
         );
 
-        setCategories(
-          Array.from(categoryMap.values())
-        );
+        setCategories(Array.from(categoryMap.values()));
       } catch (error) {
         console.error(error);
 
@@ -90,24 +109,26 @@ const AddProduct = () => {
   }, []);
 
   // ==========================================
-  // CLEAN UP IMAGE PREVIEW
+  // CLEAN UP IMAGE PREVIEW URLS
   // ==========================================
 
   useEffect(() => {
     return () => {
-      if (imagePreview) {
-        URL.revokeObjectURL(imagePreview);
-      }
+      imagePreviews.forEach((preview) => {
+        URL.revokeObjectURL(preview);
+      });
     };
-  }, [imagePreview]);
+  }, [imagePreviews]);
 
   // ==========================================
-  // HANDLE INPUT
+  // HANDLE FORM INPUT
   // ==========================================
 
   const handleChange = (
-    event: React.ChangeEvent<
-      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    event: ChangeEvent<
+      HTMLInputElement |
+        HTMLTextAreaElement |
+        HTMLSelectElement
     >
   ) => {
     const { name, value } = event.target;
@@ -119,56 +140,156 @@ const AddProduct = () => {
   };
 
   // ==========================================
-  // HANDLE IMAGE
+  // HANDLE IMAGE FILES
+  // ==========================================
+
+  const handleImageFiles = (selectedFiles: File[]) => {
+    if (selectedFiles.length === 0) {
+      return;
+    }
+
+    // Validate file type and size first.
+    for (const file of selectedFiles) {
+      if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+        setError(
+          `"${file.name}" is not a supported image. Please use JPG, PNG, or WEBP.`
+        );
+        return;
+      }
+
+      if (file.size > MAX_FILE_SIZE) {
+        setError(
+          `"${file.name}" is too large. Each image must be smaller than 5MB.`
+        );
+        return;
+      }
+    }
+
+    // Prevent adding the exact same file twice.
+    const existingFileKeys = new Set(
+      images.map(
+        (file) =>
+          `${file.name}-${file.size}-${file.lastModified}`
+      )
+    );
+
+    const newFiles = selectedFiles.filter((file) => {
+      const fileKey = `${file.name}-${file.size}-${file.lastModified}`;
+
+      return !existingFileKeys.has(fileKey);
+    });
+
+    if (newFiles.length === 0) {
+      setError("These images have already been selected.");
+      return;
+    }
+
+    // Calculate how many image slots remain.
+    const remainingSlots = MAX_IMAGES - images.length;
+
+    if (remainingSlots <= 0) {
+      setError(
+        `You can upload a maximum of ${MAX_IMAGES} images.`
+      );
+      return;
+    }
+
+    // Do not partially add a batch.
+    if (newFiles.length > remainingSlots) {
+      setError(
+        `You can only add ${remainingSlots} more ${
+          remainingSlots === 1 ? "image" : "images"
+        }. Maximum is ${MAX_IMAGES} images.`
+      );
+      return;
+    }
+
+    // Create previews only for the newly added files.
+    const newPreviews = newFiles.map((file) =>
+      URL.createObjectURL(file)
+    );
+
+    // IMPORTANT:
+    // Append instead of replacing existing images.
+    setImages((currentImages) => [
+      ...currentImages,
+      ...newFiles,
+    ]);
+
+    setImagePreviews((currentPreviews) => [
+      ...currentPreviews,
+      ...newPreviews,
+    ]);
+
+    setError("");
+  };
+
+  // ==========================================
+  // HANDLE FILE INPUT
   // ==========================================
 
   const handleImageChange = (
-    event: React.ChangeEvent<HTMLInputElement>
+    event: ChangeEvent<HTMLInputElement>
   ) => {
-    const file = event.target.files?.[0];
+    const files = Array.from(
+      event.target.files || []
+    );
 
-    if (!file) return;
+    handleImageFiles(files);
 
-    const allowedTypes = [
-      "image/jpeg",
-      "image/png",
-      "image/webp",
-    ];
-
-    if (!allowedTypes.includes(file.type)) {
-      setError(
-        "Please select a JPG, PNG, or WEBP image."
-      );
-
-      event.target.value = "";
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      setError("Image must be smaller than 5MB.");
-
-      event.target.value = "";
-      return;
-    }
-
-    setError("");
-
-    // Remove previous preview URL
-    if (imagePreview) {
-      URL.revokeObjectURL(imagePreview);
-    }
-
-    setImage(file);
-    setImagePreview(URL.createObjectURL(file));
+    // Allows selecting the same file again later.
+    event.target.value = "";
   };
 
-  const handleRemoveImage = () => {
-    if (imagePreview) {
-      URL.revokeObjectURL(imagePreview);
-    }
+  // ==========================================
+  // DRAG & DROP
+  // ==========================================
 
-    setImage(null);
-    setImagePreview(null);
+  const handleDragOver = (
+    event: DragEvent<HTMLDivElement>
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (
+    event: DragEvent<HTMLDivElement>
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    setIsDragging(false);
+  };
+
+  const handleDrop = (
+    event: DragEvent<HTMLDivElement>
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    setIsDragging(false);
+
+    const files = Array.from(
+      event.dataTransfer.files || []
+    );
+
+    handleImageFiles(files);
+  };
+
+  // ==========================================
+  // REMOVE ALL IMAGES
+  // ==========================================
+
+  const handleRemoveImages = () => {
+    imagePreviews.forEach((preview) => {
+      URL.revokeObjectURL(preview);
+    });
+
+    setImages([]);
+    setImagePreviews([]);
+    setError("");
   };
 
   // ==========================================
@@ -176,7 +297,7 @@ const AddProduct = () => {
   // ==========================================
 
   const handleSubmit = async (
-    event: React.FormEvent<HTMLFormElement>
+    event: FormEvent<HTMLFormElement>
   ) => {
     event.preventDefault();
 
@@ -196,13 +317,20 @@ const AddProduct = () => {
       return;
     }
 
-    if (!form.price) {
+    if (form.price === "") {
       setError("Price is required.");
       return;
     }
 
-    if (!form.stock) {
+    if (form.stock === "") {
       setError("Stock is required.");
+      return;
+    }
+
+    if (images.length === 0) {
+      setError(
+        "Please upload at least one product image."
+      );
       return;
     }
 
@@ -240,9 +368,9 @@ const AddProduct = () => {
         price,
         stock,
         category_id: form.category_id,
-        image: image ?? undefined,
 
-        // Discount intentionally not sent to backend.
+        // Send all selected images.
+        images,
       };
 
       await createProduct(productData);
@@ -269,7 +397,10 @@ const AddProduct = () => {
     <main className="min-h-screen bg-gray-100 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-4xl">
 
-        {/* Header */}
+        {/* ==========================================
+            HEADER
+        ========================================== */}
+
         <div className="mb-8">
           <button
             type="button"
@@ -295,14 +426,20 @@ const AddProduct = () => {
           </p>
         </div>
 
-        {/* Error */}
+        {/* ==========================================
+            ERROR MESSAGE
+        ========================================== */}
+
         {error && (
           <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
             {error}
           </div>
         )}
 
-        {/* Form */}
+        {/* ==========================================
+            FORM
+        ========================================== */}
+
         <form
           onSubmit={handleSubmit}
           className="space-y-6"
@@ -325,7 +462,8 @@ const AddProduct = () => {
 
             <div className="space-y-5">
 
-              {/* Name */}
+              {/* Product Name */}
+
               <div>
                 <label
                   htmlFor="name"
@@ -349,6 +487,7 @@ const AddProduct = () => {
               </div>
 
               {/* Description */}
+
               <div>
                 <label
                   htmlFor="description"
@@ -389,6 +528,7 @@ const AddProduct = () => {
             <div className="grid gap-5 sm:grid-cols-2">
 
               {/* Category */}
+
               <div>
                 <label
                   htmlFor="category_id"
@@ -426,6 +566,7 @@ const AddProduct = () => {
               </div>
 
               {/* Media Type */}
+
               <div>
                 <label
                   htmlFor="media_type"
@@ -453,13 +594,12 @@ const AddProduct = () => {
                   </option>
                   <option value="VCD">VCD</option>
                   <option value="DVD">DVD</option>
-                  <option value="OTHER">
-                    Other
-                  </option>
+                  <option value="OTHER">Other</option>
                 </select>
               </div>
 
               {/* Condition */}
+
               <div>
                 <label
                   htmlFor="condition"
@@ -504,6 +644,7 @@ const AddProduct = () => {
             <div className="grid gap-5 sm:grid-cols-3">
 
               {/* Price */}
+
               <div>
                 <label
                   htmlFor="price"
@@ -535,6 +676,7 @@ const AddProduct = () => {
               </div>
 
               {/* Stock */}
+
               <div>
                 <label
                   htmlFor="stock"
@@ -560,6 +702,7 @@ const AddProduct = () => {
               </div>
 
               {/* Discount */}
+
               <div>
                 <label
                   htmlFor="discount"
@@ -599,66 +742,161 @@ const AddProduct = () => {
           </section>
 
           {/* ==========================================
-              PRODUCT IMAGE
+              PRODUCT IMAGES
           ========================================== */}
 
           <section className="rounded-2xl bg-white p-6 shadow-sm sm:p-8">
+
             <div className="mb-6">
               <h2 className="text-lg font-bold text-gray-900">
-                Product Image
+                Product Images
               </h2>
 
               <p className="mt-1 text-sm text-gray-500">
-                Upload an image for the product.
+                Upload up to 5 images for this product.
               </p>
             </div>
 
-            <div className="rounded-xl border-2 border-dashed border-gray-200 p-6">
+            {/* ==========================================
+                DRAG & DROP AREA
+            ========================================== */}
 
-              {imagePreview ? (
-                <div className="space-y-4">
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={`rounded-xl border-2 border-dashed p-6 transition ${
+                isDragging
+                  ? "border-pink-400 bg-pink-50"
+                  : "border-gray-200"
+              }`}
+            >
 
-                  {/* Preview */}
-                  <div className="overflow-hidden rounded-xl bg-gray-100">
-                    <img
-                      src={imagePreview}
-                      alt="Product preview"
-                      className="max-h-72 w-full object-contain"
-                    />
+              {imagePreviews.length > 0 ? (
+
+                <div className="space-y-5">
+
+                  {/* IMAGE PREVIEW GRID */}
+
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-5">
+
+                    {imagePreviews.map(
+                      (preview, index) => (
+                        <div
+                          key={preview}
+                          className="group relative overflow-hidden rounded-xl border border-gray-200 bg-gray-50"
+                        >
+                          <img
+                            src={preview}
+                            alt={`Product image ${index + 1}`}
+                            className="aspect-square w-full object-cover"
+                          />
+
+                          {/* Main image */}
+
+                          {index === 0 && (
+                            <div className="absolute left-2 top-2 rounded-md bg-pink-500 px-2 py-1 text-xs font-semibold text-white">
+                              Main Image
+                            </div>
+                          )}
+
+                          {/* Image number */}
+
+                          <div className="absolute bottom-2 left-2 rounded-md bg-black/70 px-2 py-1 text-xs font-medium text-white">
+                            Image {index + 1}
+                          </div>
+                        </div>
+                      )
+                    )}
+
                   </div>
 
-                  {/* File Information */}
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-gray-900">
-                        {image?.name}
-                      </p>
+                  {/* SELECTED COUNT */}
 
-                      <p className="text-xs text-gray-500">
-                        {image
-                          ? `${(
-                              image.size /
-                              1024 /
-                              1024
-                            ).toFixed(2)} MB`
-                          : ""}
-                      </p>
-                    </div>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+
+                    <p className="text-sm text-gray-500">
+                      {images.length}{" "}
+                      {images.length === 1
+                        ? "image"
+                        : "images"}{" "}
+                      selected
+                    </p>
 
                     <button
                       type="button"
-                      onClick={handleRemoveImage}
+                      onClick={handleRemoveImages}
                       className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50"
                     >
-                      Remove Image
+                      Remove All Images
                     </button>
+
                   </div>
 
+                  {/* ADD MORE IMAGES */}
+
+                  {images.length < MAX_IMAGES && (
+                    <div
+                      className={`rounded-xl border-2 border-dashed p-6 text-center transition ${
+                        isDragging
+                          ? "border-pink-400 bg-pink-50"
+                          : "border-gray-200"
+                      }`}
+                    >
+                      <ImageIcon
+                        size={24}
+                        className="mx-auto mb-2 text-gray-400"
+                      />
+
+                      <p className="text-sm font-semibold text-gray-700">
+                        {isDragging
+                          ? "Drop images here"
+                          : "Drag & drop more images"}
+                      </p>
+
+                      <p className="mt-1 text-xs text-gray-500">
+                        or click the button below
+                      </p>
+
+                      <label
+                        htmlFor="product-images"
+                        className="mt-3 inline-flex cursor-pointer items-center rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-800"
+                      >
+                        Add Images
+
+                        <input
+                          id="product-images"
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          multiple
+                          onChange={handleImageChange}
+                          className="hidden"
+                        />
+                      </label>
+
+                      <p className="mt-3 text-xs text-gray-400">
+                        {MAX_IMAGES - images.length}{" "}
+                        {MAX_IMAGES - images.length === 1
+                          ? "image"
+                          : "images"}{" "}
+                        remaining
+                      </p>
+                    </div>
+                  )}
+
                 </div>
+
               ) : (
+
+                /* EMPTY STATE */
+
                 <label
-                  htmlFor="product-image"
-                  className="flex cursor-pointer flex-col items-center justify-center py-10 text-center"
+                  htmlFor="product-images"
+                  className={`flex cursor-pointer flex-col items-center justify-center rounded-xl py-10 text-center transition ${
+                    isDragging
+                      ? "bg-pink-50"
+                      : ""
+                  }`}
                 >
                   <div className="mb-4 rounded-full bg-gray-100 p-4">
                     <ImageIcon
@@ -668,17 +906,24 @@ const AddProduct = () => {
                   </div>
 
                   <p className="text-sm font-semibold text-gray-900">
-                    Click to upload an image
+                    {isDragging
+                      ? "Drop your images here"
+                      : "Drag & drop images here"}
                   </p>
 
-                  <p className="mt-1 text-xs text-gray-500">
-                    JPG, PNG, or WEBP · Maximum 5MB
+                  <p className="mt-1 text-sm text-gray-500">
+                    or click to browse
+                  </p>
+
+                  <p className="mt-2 text-xs text-gray-500">
+                    Up to 5 images · JPG, PNG, or WEBP · Maximum 5MB each
                   </p>
 
                   <input
-                    id="product-image"
+                    id="product-images"
                     type="file"
                     accept="image/jpeg,image/png,image/webp"
+                    multiple
                     onChange={handleImageChange}
                     className="hidden"
                   />
@@ -707,7 +952,10 @@ const AddProduct = () => {
 
             <button
               type="submit"
-              disabled={isSaving || isLoadingCategories}
+              disabled={
+                isSaving ||
+                isLoadingCategories
+              }
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-950 px-6 py-3 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Save size={17} />

@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { supabase } from "../config/supabase";
 import { randomUUID } from "crypto";
+import multer from "multer";
 export const getProducts = async (
   _req: Request,
   res: Response
@@ -65,6 +66,11 @@ export const getProductById = async (
         categories (
           id,
           name
+        ),
+        product_images (
+          id,
+          image_url,
+          display_order
         )
       `)
       .eq("id", id)
@@ -119,7 +125,6 @@ const uploadProductImage = async (
 
   return data.publicUrl;
 };
-
 export const createProduct = async (
   req: Request,
   res: Response
@@ -135,7 +140,7 @@ export const createProduct = async (
       category_id,
     } = req.body || {};
 
-    const file = req.file;
+    const files = (req.files as Express.Multer.File[]) || [];
 
     // ==========================================
     // VALIDATION
@@ -155,13 +160,14 @@ export const createProduct = async (
     }
 
     // ==========================================
-    // UPLOAD PRODUCT IMAGE
+    // UPLOAD PRODUCT IMAGES
     // ==========================================
 
     let imageUrl: string | null = null;
 
-    if (file) {
-      imageUrl = await uploadProductImage(file);
+    // First image becomes the existing main image
+    if (files.length > 0) {
+      imageUrl = await uploadProductImage(files[0]);
     }
 
     // ==========================================
@@ -204,9 +210,91 @@ export const createProduct = async (
       });
     }
 
+    // ==========================================
+    // UPLOAD ADDITIONAL IMAGES
+    // ==========================================
+
+    if (files.length > 1) {
+      const additionalFiles = files.slice(1);
+
+      const imageRecords = [];
+
+      for (let i = 0; i < additionalFiles.length; i++) {
+        const uploadedImageUrl = await uploadProductImage(
+          additionalFiles[i]
+        );
+
+        imageRecords.push({
+          product_id: data.id,
+          image_url: uploadedImageUrl,
+          display_order: i + 2,
+        });
+      }
+
+      // ==========================================
+      // SAVE ADDITIONAL IMAGES
+      // ==========================================
+
+      const { error: imageError } = await supabase
+        .from("product_images")
+        .insert(imageRecords);
+
+      if (imageError) {
+        console.error(
+          "Product images insert error:",
+          imageError
+        );
+
+        return res.status(500).json({
+          message: "Product created, but additional images failed to save.",
+        });
+      }
+    }
+
+    // ==========================================
+    // GET PRODUCT WITH IMAGES
+    // ==========================================
+
+    const { data: productWithImages, error: fetchError } =
+      await supabase
+        .from("products")
+        .select(`
+          id,
+          name,
+          description,
+          media_type,
+          condition,
+          price,
+          stock,
+          image_url,
+          categories (
+            id,
+            name
+          ),
+          product_images (
+            id,
+            image_url,
+            display_order
+          )
+        `)
+        .eq("id", data.id)
+        .single();
+
+    if (fetchError) {
+      console.error(
+        "Failed to fetch created product:",
+        fetchError
+      );
+
+      return res.status(201).json({
+        data,
+      });
+    }
+
     return res.status(201).json({
-      data,
+      data: productWithImages,
     });
+
   } catch (error) {
     console.error("Server error:", error);
 
