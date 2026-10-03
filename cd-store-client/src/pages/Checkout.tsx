@@ -44,6 +44,9 @@ const Checkout = () => {
 
   const subtotal = getCartSubtotal();
 
+  const requiresDeliveryAddress =
+  deliveryMethod !== "STORE_PICKUP";
+
   /*
    * Clear one field's validation error
    * whenever the user starts correcting it.
@@ -159,44 +162,37 @@ const Checkout = () => {
       setSubmitting(true);
 
       const result = await createOrder({
-        customer_name: customerName.trim(),
-        phone: phone.trim(),
+  customer_name: customerName.trim(),
+  phone: phone.trim(),
 
-        /*
-         * Only send delivery address when
-         * the customer selected delivery.
-         */
-        province:
-          deliveryMethod === "DELIVERY"
-            ? province.trim()
-            : undefined,
+  // Send the address for Nationwide Delivery
+  // and Same-Day Lalamove.
+  // Store Pickup does not need an address.
+  province: requiresDeliveryAddress
+    ? province.trim()
+    : undefined,
 
-        city:
-          deliveryMethod === "DELIVERY"
-            ? city.trim()
-            : undefined,
+  city: requiresDeliveryAddress
+    ? city.trim()
+    : undefined,
 
-        barangay:
-          deliveryMethod === "DELIVERY"
-            ? barangay.trim()
-            : undefined,
+  barangay: requiresDeliveryAddress
+    ? barangay.trim()
+    : undefined,
 
-        street_address:
-          deliveryMethod === "DELIVERY"
-            ? streetAddress.trim()
-            : undefined,
+  street_address: requiresDeliveryAddress
+    ? streetAddress.trim()
+    : undefined,
 
-        postal_code:
-          deliveryMethod === "DELIVERY"
-            ? postalCode.trim()
-            : undefined,
+  postal_code: requiresDeliveryAddress
+    ? postalCode.trim()
+    : undefined,
 
-        delivery_method: deliveryMethod,
-        payment_method: paymentMethod,
+  delivery_method: deliveryMethod,
+  payment_method: paymentMethod,
 
-        items,
-      });
-
+  items,
+});
       console.log("Order created:", result);
 
       /*

@@ -50,7 +50,7 @@ const CustomerInformation = ({
   onStreetAddressChange,
   onPostalCodeChange,
 }: CustomerInformationProps) => {
-  const isDelivery = deliveryMethod === "DELIVERY";
+  const isDelivery = deliveryMethod !== "STORE_PICKUP";
 
   const inputClass = (error?: string) =>
     `w-full rounded-lg border px-4 py-3 outline-none transition ${

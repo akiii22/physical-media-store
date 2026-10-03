@@ -15,7 +15,9 @@ const DeliveryMethod = ({
         Delivery Method
       </h2>
 
-      <div className="mt-5 grid gap-4 md:grid-cols-2">
+      <div className="mt-5 grid gap-4 md:grid-cols-3">
+
+        {/* Nationwide Delivery */}
         <label
           className={`cursor-pointer rounded-xl border p-5 transition ${
             value === "DELIVERY"
@@ -41,6 +43,34 @@ const DeliveryMethod = ({
           </p>
         </label>
 
+        {/* Same-Day Delivery */}
+        <label
+          className={`cursor-pointer rounded-xl border p-5 transition ${
+            value === "SAME_DAY"
+              ? "border-gray-900 ring-1 ring-gray-900"
+              : "border-gray-200 hover:border-gray-900"
+          }`}
+        >
+          <input
+            type="radio"
+            name="deliveryMethod"
+            value="SAME_DAY"
+            checked={value === "SAME_DAY"}
+            onChange={() => onChange("SAME_DAY")}
+            className="mr-3"
+          />
+
+          <span className="font-medium text-gray-900">
+            Same-Day Delivery
+          </span>
+
+          <p className="mt-2 text-sm text-gray-500">
+            Same-day delivery via Lalamove. Delivery fee will be
+            determined separately.
+          </p>
+        </label>
+
+        {/* Store Pickup */}
         <label
           className={`cursor-pointer rounded-xl border p-5 transition ${
             value === "STORE_PICKUP"
@@ -65,6 +95,7 @@ const DeliveryMethod = ({
             Pick up your order directly from the store.
           </p>
         </label>
+
       </div>
     </section>
   );

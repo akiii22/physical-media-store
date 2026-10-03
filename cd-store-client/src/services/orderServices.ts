@@ -13,6 +13,7 @@ const API_URL = import.meta.env.VITE_API_URL;
 
 export type DeliveryMethod =
   | "DELIVERY"
+  | "SAME_DAY"
   | "STORE_PICKUP";
 
 export type PaymentMethod =

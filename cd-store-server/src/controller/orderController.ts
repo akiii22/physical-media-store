@@ -58,7 +58,7 @@ export const createOrder = async (
     // ----------------------------------------------------------
 
     if (
-      delivery_method === "DELIVERY" &&
+      delivery_method !== "STORE_PICKUP" &&
       (!province ||
         !city ||
         !barangay ||
@@ -183,27 +183,27 @@ export const createOrder = async (
         phone,
 
         province:
-          delivery_method === "DELIVERY"
+          delivery_method !== "STORE_PICKUP"
             ? province
             : null,
 
         city:
-          delivery_method === "DELIVERY"
+          delivery_method !== "STORE_PICKUP"
             ? city
             : null,
 
         barangay:
-          delivery_method === "DELIVERY"
+          delivery_method !== "STORE_PICKUP"
             ? barangay
             : null,
 
         street_address:
-          delivery_method === "DELIVERY"
+          delivery_method !== "STORE_PICKUP"
             ? street_address
             : null,
 
         postal_code:
-          delivery_method === "DELIVERY"
+          delivery_method !== "STORE_PICKUP"
             ? postal_code || null
             : null,
       })
