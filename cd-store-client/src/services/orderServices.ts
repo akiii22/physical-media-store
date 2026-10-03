@@ -94,22 +94,18 @@ export type OrderDetails = {
   order_id: string;
   status: OrderStatus;
   total_amount: number;
-
+  delivery_fee: number;
+  delivery_fee_status: "NOT_SET" | "PENDING" | "PAID";
   delivery_method: DeliveryMethod;
-
   recipient_name: string;
   phone: string;
-
   province: string | null;
   city: string | null;
   barangay: string | null;
   street_address: string | null;
   postal_code: string | null;
-
   created_at: string;
-
   payment: OrderPayment | null;
-
   shipment: OrderShipment | null;
 };
 
@@ -276,6 +272,37 @@ export const updateOrderStatus = async (
       }),
     }
   );
+};
+
+export const updateDeliveryFee = async (
+  orderId: string,
+  deliveryFee: number
+) => {
+  const token = await getAccessToken();
+
+  const response = await fetch(
+    `${API_URL}/orders/admin/${orderId}/delivery-fee`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        delivery_fee: deliveryFee,
+      }),
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data.message || "Failed to update delivery fee."
+    );
+  }
+
+  return data.data;
 };
 
 

@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { supabase } from "../config/supabase";
-
+import multer from "multer";
+import { AuthenticatedRequest } from "../middleware/authMiddleware";
 interface MulterRequest extends Request {
   file?: Express.Multer.File;
 }
@@ -386,7 +387,8 @@ export const verifyPayment = async (
         id,
         order_id,
         amount,
-        status
+        status,
+        payment_type
       `)
       .eq("id", paymentId)
       .single();
@@ -475,7 +477,7 @@ export const verifyPayment = async (
 
         payment_status: "PAID",
 
-        order_status: "PROCESSING",
+        order_status: payment.payment_type,
       },
     });
 
@@ -488,6 +490,278 @@ export const verifyPayment = async (
 
     return res.status(500).json({
       message: "Internal server error.",
+    });
+  }
+};
+
+export const createDeliveryPayment = async (
+  req: AuthenticatedRequest,
+  res: Response
+) => {
+  try {
+    const { order_id, method } = req.body;
+    const user_id = req.user?.id;
+
+    if (!user_id || !order_id || !method) {
+      return res.status(400).json({
+        message: "Order ID and payment method are required.",
+      });
+    }
+
+    if (!["GCASH", "MAYA", "CARD"].includes(method)) {
+      return res.status(400).json({
+        message: "Invalid payment method.",
+      });
+    }
+
+    // Get the customer's order
+    const { data: order, error: orderError } = await supabase
+      .from("orders")
+      .select("id, user_id, delivery_fee, delivery_fee_status")
+      .eq("id", order_id)
+      .single();
+
+    if (orderError || !order) {
+      return res.status(404).json({
+        message: "Order not found.",
+      });
+    }
+
+    // Make sure the order belongs to the logged-in customer
+    if (order.user_id !== user_id) {
+      return res.status(403).json({
+        message: "You are not allowed to pay for this order.",
+      });
+    }
+
+    // Delivery fee must exist
+    if (!order.delivery_fee || Number(order.delivery_fee) <= 0) {
+      return res.status(400).json({
+        message: "There is no delivery fee to pay.",
+      });
+    }
+
+    // Prevent paying the delivery fee twice
+    if (order.delivery_fee_status === "PAID") {
+      return res.status(400).json({
+        message: "The delivery fee has already been paid.",
+      });
+    }
+
+    // Check whether a pending delivery payment already exists
+    const { data: existingPayment } = await supabase
+      .from("payments")
+      .select("id, amount, method, status")
+      .eq("order_id", order_id)
+      .eq("payment_type", "DELIVERY")
+      .eq("status", "PENDING")
+      .maybeSingle();
+
+    if (existingPayment) {
+      return res.status(200).json({
+        message: "A delivery payment already exists.",
+        data: existingPayment,
+      });
+    }
+
+    // Create delivery payment
+    const { data: payment, error: paymentError } = await supabase
+      .from("payments")
+      .insert({
+        order_id,
+        method,
+        amount: Number(order.delivery_fee),
+        status: "PENDING",
+        payment_type: "DELIVERY",
+      })
+      .select()
+      .single();
+
+    if (paymentError) {
+      console.error("Failed to create delivery payment:", paymentError);
+
+      return res.status(500).json({
+        message: "Failed to create delivery payment.",
+      });
+    }
+
+    return res.status(201).json({
+      message: "Delivery payment created successfully.",
+      data: payment,
+    });
+  } catch (error) {
+    console.error("Create delivery payment error:", error);
+
+    return res.status(500).json({
+      message: "Internal server error.",
+    });
+  }
+};
+
+export const uploadDeliveryPaymentProof = async (
+  req: AuthenticatedRequest,
+  res: Response
+) => {
+  try {
+    const { orderId } = req.params;
+    const file = req.file;
+
+    if (!orderId) {
+      return res.status(400).json({
+        message: "Order ID is required.",
+      });
+    }
+
+    if (!file) {
+      return res.status(400).json({
+        message: "Delivery payment proof is required.",
+      });
+    }
+
+    // ----------------------------------------------------------
+    // Get order
+    // ----------------------------------------------------------
+
+    const { data: order, error: orderError } = await supabase
+      .from("orders")
+      .select("id, user_id, delivery_fee, delivery_fee_status")
+      .eq("id", orderId)
+      .single();
+
+    if (orderError || !order) {
+      return res.status(404).json({
+        message: "Order not found.",
+      });
+    }
+
+    // ----------------------------------------------------------
+    // Make sure customer owns the order
+    // ----------------------------------------------------------
+
+    if (order.user_id !== req.user?.id) {
+      return res.status(403).json({
+        message: "You do not have permission to update this order.",
+      });
+    }
+
+    // ----------------------------------------------------------
+    // Validate delivery fee
+    // ----------------------------------------------------------
+
+    if (!order.delivery_fee || order.delivery_fee <= 0) {
+      return res.status(400).json({
+        message: "No delivery fee is currently set.",
+      });
+    }
+
+    if (order.delivery_fee_status === "PAID") {
+      return res.status(400).json({
+        message: "Delivery fee has already been paid.",
+      });
+    }
+
+    // ----------------------------------------------------------
+    // Find DELIVERY payment
+    // ----------------------------------------------------------
+
+    const { data: payment, error: paymentLookupError } =
+      await supabase
+        .from("payments")
+        .select("id, status, payment_type")
+        .eq("order_id", orderId)
+        .eq("payment_type", "DELIVERY")
+        .in("status", ["PENDING", "FAILED"])
+        .maybeSingle();
+
+    if (paymentLookupError) {
+      console.error(
+        "Delivery payment lookup error:",
+        paymentLookupError
+      );
+
+      return res.status(500).json({
+        message: "Failed to find delivery payment.",
+      });
+    }
+
+    if (!payment) {
+      return res.status(404).json({
+        message: "Delivery payment has not been created yet.",
+      });
+    }
+
+    // ----------------------------------------------------------
+    // Upload proof to Storage
+    // ----------------------------------------------------------
+
+    const fileExtension =
+      file.originalname.split(".").pop()?.toLowerCase() || "jpg";
+
+    const filePath =
+      `${orderId}/delivery-${crypto.randomUUID()}.${fileExtension}`;
+
+    const { error: uploadError } = await supabase.storage
+  .from("payment_proof")
+  .upload(filePath, file.buffer, {
+    contentType: file.mimetype,
+    upsert: false,
+  });
+
+if (uploadError) {
+  console.error(
+    "Delivery proof storage error:",
+    uploadError
+  );
+
+  return res.status(500).json({
+    message: "Failed to upload delivery payment proof.",
+  });
+}
+
+const { data: publicUrlData } = supabase.storage
+  .from("payment_proof")
+  .getPublicUrl(filePath);
+
+const proofUrl = publicUrlData.publicUrl;
+
+    // ----------------------------------------------------------
+    // Update DELIVERY payment
+    // ----------------------------------------------------------
+
+    const { data: updatedPayment, error: updateError } =
+      await supabase
+        .from("payments")
+        .update({
+          proof_url: proofUrl,
+          status: "PENDING",
+        })
+        .eq("id", payment.id)
+        .select()
+        .single();
+
+    if (updateError) {
+      console.error(
+        "Delivery payment update error:",
+        updateError
+      );
+
+      return res.status(500).json({
+        message: "Failed to update delivery payment.",
+      });
+    }
+
+    return res.status(200).json({
+      message: "Delivery payment proof uploaded successfully.",
+      data: updatedPayment,
+    });
+  } catch (error) {
+    console.error(
+      "Upload delivery payment proof error:",
+      error
+    );
+
+    return res.status(500).json({
+      message: "Failed to upload delivery payment proof.",
     });
   }
 };

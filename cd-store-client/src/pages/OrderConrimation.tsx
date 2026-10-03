@@ -282,6 +282,10 @@ const OrderConfirmation = () => {
 
   const hasPaymentProof =
     Boolean(order.payment?.proof_url) || uploadSuccess;
+const deliveryFee = Number(order.delivery_fee ?? 0);
+const hasDeliveryFee =
+  deliveryFee > 0;
+const amountToPayNow = Number(order.total_amount);
 
   /*
    * ============================================================
@@ -361,28 +365,63 @@ const OrderConfirmation = () => {
             </div>
           </div>
 
-          <div className="grid divide-y divide-gray-100 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
-            <div className="px-6 py-5 sm:px-8">
-              <p className="text-sm text-gray-500">
-                Payment Method
-              </p>
+          <div className="grid divide-y divide-gray-100 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+  {/* Payment Method */}
+  <div className="px-6 py-4 sm:px-6">
+    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+      Payment Method
+    </p>
 
-              <p className="mt-1 font-semibold text-gray-900">
-                {paymentMethod}
-              </p>
-            </div>
+    <p className="mt-1 font-semibold text-gray-900">
+      {paymentMethod}
+    </p>
+  </div>
 
-            <div className="px-6 py-5 sm:px-8">
-              <p className="text-sm text-gray-500">
-                Order Total
-              </p>
+  {/* Products */}
+  <div className="px-6 py-4 sm:px-6">
+    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+      Products
+    </p>
 
-              <p className="mt-1 text-2xl font-bold text-gray-900">
-                ₱{Number(order.total_amount).toLocaleString()}
-              </p>
-            </div>
-          </div>
+    <p className="mt-1 font-semibold text-gray-900">
+      ₱{amountToPayNow.toLocaleString()}
+    </p>
+  </div>
+
+  {/* Delivery */}
+  <div className="px-6 py-4 sm:px-6">
+    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+      Delivery Fee
+    </p>
+
+    <p className="mt-1 font-semibold text-gray-900">
+      {hasDeliveryFee
+        ? `₱${deliveryFee.toLocaleString()}`
+        : "To be determined"}
+    </p>
+
+    {!hasDeliveryFee && (
+      <p className="mt-0.5 text-xs text-gray-500">
+        Paid separately
+      </p>
+    )}
+  </div>
+</div>
         </section>
+
+        {!hasDeliveryFee && (
+  <div className="mt-3 rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3">
+    <p className="text-sm font-medium text-yellow-800">
+      Delivery fee will be paid separately
+    </p>
+
+    <p className="mt-0.5 text-xs leading-5 text-yellow-700">
+      The store will calculate your delivery fee after reviewing
+      your order. You can pay for the products now and pay the
+      delivery fee separately once it is available.
+    </p>
+  </div>
+)}
 
         {/* =====================================================
             WHAT HAPPENS NEXT

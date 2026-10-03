@@ -124,3 +124,36 @@ export const rejectPayment = async (
 
   return data;
 };
+
+// Create delivery payment
+export const createDeliveryPayment = async (
+  orderId: string,
+  method: "GCASH" | "MAYA" | "CARD"
+) => {
+  const token = await getAccessToken();
+
+  const response = await fetch(
+    `${API_URL}/payments/delivery`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        order_id: orderId,
+        method,
+      }),
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data.message || "Failed to create delivery payment."
+    );
+  }
+
+  return data;
+};

@@ -1,6 +1,6 @@
 import { requireAuth, requireAdmin } from './../middleware/authMiddleware';
 import {Router} from "express";
-import { createOrder, getAllOrders, getMyOrders, getOrderById, updateOrderStatus, updateShipment} from "../controller/orderController";
+import { createOrder, getAllOrders, getMyOrders, getOrderById, updateOrderStatus, updateShipment, updateDeliveryFee} from "../controller/orderController";
 
 const router = Router();
 
@@ -25,6 +25,13 @@ router.patch(
   requireAuth,
   requireAdmin,
   updateShipment
+);
+
+router.patch(
+  "/admin/:orderId/delivery-fee",
+  requireAuth,
+  requireAdmin,
+  updateDeliveryFee
 );
 
 router.get(

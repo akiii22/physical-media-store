@@ -11,6 +11,8 @@ import {
   getPendingPayments,
   verifyPayment,
   rejectPayment,
+  createDeliveryPayment,
+  uploadDeliveryPaymentProof,
 } from "../controller/paymentController";
 
 const router = Router();
@@ -33,11 +35,26 @@ const upload = multer({
 // CUSTOMER
 // ============================================================
 
+
+
 // Upload payment proof
 router.post(
   "/:orderId/proof",
   upload.single("proof"),
   uploadPaymentProof
+);
+
+router.post(
+  "/delivery",
+  requireAuth,
+  createDeliveryPayment
+);
+
+router.post(
+  "/delivery/:orderId/proof",
+  requireAuth,
+  upload.single("proof"),
+  uploadDeliveryPaymentProof
 );
 
 

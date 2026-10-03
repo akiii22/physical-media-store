@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   ArrowLeft,
-  Check,
   CheckCircle2,
   Clock3,
   CreditCard,
@@ -17,10 +16,22 @@ import { supabase } from "../lib/supabase";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
+type Payment = {
+  id: string;
+  amount: number;
+  method: string;
+  status: string;
+  payment_type: "PRODUCT" | "DELIVERY";
+  proof_url: string | null;
+  paid_at: string | null;
+};
+
 type Order = {
   id: string;
   status: string;
   total_amount: number;
+  delivery_fee: number;
+  delivery_fee_status: string;
   delivery_method: string;
   recipient_name: string;
   phone: string;
@@ -40,14 +51,7 @@ type Order = {
     unit_price: number;
   }[];
 
-  payments: {
-    id: string;
-    amount: number;
-    method: string;
-    status: string;
-    proof_url: string | null;
-    paid_at: string | null;
-  }[];
+  payments: Payment[];
 
   shipments: {
     id: string;
@@ -149,10 +153,40 @@ const MyOrderDetails = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
+  // Delivery payment
+  const [deliveryPaymentMethod, setDeliveryPaymentMethod] = useState<
+    "GCASH" | "MAYA" | "CARD"
+  >("GCASH");
+
+  // IMPORTANT:
+  // This is the selected image/file, NOT the database payment.
+  const [deliveryProofFile, setDeliveryProofFile] =
+    useState<File | null>(null);
+
+  const [isCreatingDeliveryPayment, setIsCreatingDeliveryPayment] =
+    useState(false);
+
+  const [isUploadingDeliveryProof, setIsUploadingDeliveryProof] =
+    useState(false);
+
+  const [deliveryPaymentMessage, setDeliveryPaymentMessage] =
+    useState("");
+
+    const [productProofFile, setProductProofFile] =
+  useState<File | null>(null);
+
+const [isUploadingProductProof, setIsUploadingProductProof] =
+  useState(false);
+
+const [productPaymentMessage, setProductPaymentMessage] =
+  useState("");
+
+
+
   /*
-   * ==========================================================
+   * ============================================================
    * LOAD ORDER
-   * ==========================================================
+   * ============================================================
    */
 
   useEffect(() => {
@@ -177,11 +211,6 @@ const MyOrderDetails = () => {
           );
         }
 
-        /*
-         * We use /orders/my here and find the requested order.
-         * The endpoint already returns only the authenticated
-         * customer's orders.
-         */
         const response = await fetch(`${API_URL}/orders/my`, {
           headers: {
             Authorization: `Bearer ${session.access_token}`,
@@ -232,6 +261,196 @@ const MyOrderDetails = () => {
       cancelled = true;
     };
   }, [orderId]);
+
+  /*
+   * ============================================================
+   * CREATE DELIVERY PAYMENT
+   * ============================================================
+   */
+
+  const handleCreateDeliveryPayment = async () => {
+    if (!order) return;
+
+    try {
+      setIsCreatingDeliveryPayment(true);
+      setDeliveryPaymentMessage("");
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        throw new Error(
+          "Your session has expired. Please log in again."
+        );
+      }
+
+      const response = await fetch(
+        `${API_URL}/payments/delivery`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            order_id: order.id,
+            method: deliveryPaymentMethod,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.message || "Failed to create delivery payment."
+        );
+      }
+
+      /*
+       * Reload the order so the newly-created DELIVERY
+       * payment appears in order.payments.
+       */
+      window.location.reload();
+    } catch (err) {
+      setDeliveryPaymentMessage(
+        err instanceof Error
+          ? err.message
+          : "Failed to create delivery payment."
+      );
+    } finally {
+      setIsCreatingDeliveryPayment(false);
+    }
+  };
+
+  /*
+   * ============================================================
+   * UPLOAD DELIVERY PAYMENT PROOF
+   * ============================================================
+   */
+
+  const handleUploadDeliveryProof = async () => {
+    if (!order || !deliveryProofFile) {
+      return;
+    }
+
+    try {
+      setIsUploadingDeliveryProof(true);
+      setDeliveryPaymentMessage("");
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        throw new Error(
+          "Your session has expired. Please log in again."
+        );
+      }
+
+      const formData = new FormData();
+
+      formData.append("proof", deliveryProofFile);
+
+      const response = await fetch(
+        `${API_URL}/payments/delivery/${order.id}/proof`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: formData,
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
+            "Failed to upload delivery payment proof."
+        );
+      }
+
+      setDeliveryProofFile(null);
+
+      /*
+       * Reload so the updated DELIVERY payment
+       * appears immediately.
+       */
+      window.location.reload();
+    } catch (err) {
+      setDeliveryPaymentMessage(
+        err instanceof Error
+          ? err.message
+          : "Failed to upload delivery payment proof."
+      );
+    } finally {
+      setIsUploadingDeliveryProof(false);
+    }
+  };
+
+  const handleUploadProductProof = async () => {
+  if (!order || !productProofFile) {
+    return;
+  }
+
+  try {
+    setIsUploadingProductProof(true);
+    setProductPaymentMessage("");
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      throw new Error(
+        "Your session has expired. Please log in again."
+      );
+    }
+
+    const formData = new FormData();
+
+    formData.append("proof", productProofFile);
+
+    const response = await fetch(
+      `${API_URL}/payments/${order.id}/proof`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: formData,
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.message ||
+          "Failed to upload payment proof."
+      );
+    }
+
+    setProductProofFile(null);
+
+    setProductPaymentMessage(
+      "Payment proof uploaded successfully."
+    );
+
+    window.location.reload();
+  } catch (err) {
+    setProductPaymentMessage(
+      err instanceof Error
+        ? err.message
+        : "Failed to upload payment proof."
+    );
+  } finally {
+    setIsUploadingProductProof(false);
+  }
+};
 
   /*
    * ============================================================
@@ -323,7 +542,18 @@ const MyOrderDetails = () => {
    * ============================================================
    */
 
-  const payment = order.payments?.[0];
+  const productPayment = order.payments?.find(
+    (payment) => payment.payment_type === "PRODUCT"
+  );
+
+  const deliveryPaymentRecord = order.payments?.find(
+    (payment) => payment.payment_type === "DELIVERY"
+  );
+
+  console.log("ORDER PAYMENTS:", order.payments);
+console.log("PRODUCT PAYMENT:", productPayment);
+
+
   const shipment = order.shipments?.[0];
 
   const isPickup =
@@ -347,7 +577,7 @@ const MyOrderDetails = () => {
       key: "PAYMENT",
       label: "Payment Confirmed",
       description:
-        "Your payment has been confirmed.",
+        "Your product payment has been confirmed.",
       icon: CreditCard,
     },
     {
@@ -392,7 +622,7 @@ const MyOrderDetails = () => {
       key: "PAYMENT",
       label: "Payment Confirmed",
       description:
-        "Your payment has been confirmed.",
+        "Your product payment has been confirmed.",
       icon: CreditCard,
     },
     {
@@ -486,6 +716,7 @@ const MyOrderDetails = () => {
       <div className="mx-auto max-w-4xl">
 
         {/* BACK */}
+
         <Link
           to="/my-orders"
           className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-gray-600 transition hover:text-gray-900"
@@ -494,9 +725,7 @@ const MyOrderDetails = () => {
           Back to My Orders
         </Link>
 
-        {/* ====================================================
-            HEADER
-        ===================================================== */}
+        {/* HEADER */}
 
         <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:p-7">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
@@ -525,151 +754,123 @@ const MyOrderDetails = () => {
           </div>
         </section>
 
-        {/* ====================================================
-            TRACKING TIMELINE
-        ===================================================== */}
+        {/* TIMELINE */}
 
         <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:p-7">
-          <div className="flex items-start gap-4">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gray-100">
-              {isPickup ? (
-                <Store className="h-5 w-5 text-gray-700" />
-              ) : (
-                <Truck className="h-5 w-5 text-gray-700" />
-              )}
-            </div>
+          <h2 className="text-lg font-bold text-gray-900">
+            Order Progress
+          </h2>
 
-            <div>
-              <h2 className="text-lg font-bold text-gray-900">
-                {isPickup
-                  ? "Pickup Progress"
-                  : "Order Tracking"}
-              </h2>
+          <div className="mt-6 space-y-6">
+            {steps.map((step, index) => {
+              const Icon = step.icon;
+              const completed = index <= currentStep;
 
-              <p className="mt-1 text-sm text-gray-500">
-                Follow the progress of your order.
-              </p>
-            </div>
-          </div>
-
-          {order.status === "CANCELLED" ? (
-            <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-5">
-              <div className="flex items-start gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-100">
-                  <span className="font-bold text-red-600">
-                    !
-                  </span>
-                </div>
-
-                <div>
-                  <p className="font-semibold text-red-900">
-                    This order has been cancelled.
-                  </p>
-
-                  <p className="mt-1 text-sm text-red-700">
-                    Please contact the store if you need more
-                    information about this order.
-                  </p>
-                </div>
-              </div>
-            </div>
-          ) : order.status === "PAYMENT_FAILED" ? (
-            <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-5">
-              <div className="flex items-start gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-100">
-                  <CreditCard className="h-4 w-4 text-red-600" />
-                </div>
-
-                <div>
-                  <p className="font-semibold text-red-900">
-                    Payment could not be verified.
-                  </p>
-
-                  <p className="mt-1 text-sm leading-5 text-red-700">
-                    Please review your payment information or
-                    contact the store for assistance.
-                  </p>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="mt-8">
-              {steps.map((step, index) => {
-                const completed = index < currentStep;
-                const active = index === currentStep;
-                const isLast = index === steps.length - 1;
-
-                const StepIcon = step.icon;
-
-                return (
+              return (
+                <div
+                  key={step.key}
+                  className="flex gap-4"
+                >
                   <div
-                    key={step.key}
-                    className="relative flex gap-4"
+                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
+                      completed
+                        ? "bg-gray-900 text-white"
+                        : "bg-gray-100 text-gray-400"
+                    }`}
                   >
-                    {/* CONNECTING LINE */}
-                    {!isLast && (
-                      <div
-                        className={`absolute left-[19px] top-10 h-[calc(100%-10px)] w-0.5 ${
-                          index < currentStep
-                            ? "bg-gray-900"
-                            : "bg-gray-200"
-                        }`}
-                      />
-                    )}
+                    <Icon className="h-5 w-5" />
+                  </div>
 
-                    {/* ICON */}
-                    <div
-                      className={`relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 transition ${
-                        completed || active
-                          ? "border-gray-900 bg-gray-900 text-white"
-                          : "border-gray-200 bg-white text-gray-400"
+                  <div>
+                    <p
+                      className={`font-semibold ${
+                        completed
+                          ? "text-gray-900"
+                          : "text-gray-400"
                       }`}
                     >
-                      {completed ? (
-                        <Check className="h-4 w-4" />
-                      ) : (
-                        <StepIcon className="h-4 w-4" />
-                      )}
-                    </div>
+                      {step.label}
+                    </p>
 
-                    {/* CONTENT */}
-                    <div className="pb-8">
-                      <p
-                        className={`font-semibold ${
-                          completed || active
-                            ? "text-gray-900"
-                            : "text-gray-400"
-                        }`}
-                      >
-                        {step.label}
-                      </p>
-
-                      <p
-                        className={`mt-1 text-sm ${
-                          completed || active
-                            ? "text-gray-500"
-                            : "text-gray-400"
-                        }`}
-                      >
-                        {step.description}
-                      </p>
-
-                      {active && (
-                        <span className="mt-2 inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
-                          Current status
-                        </span>
-                      )}
-                    </div>
+                    <p className="mt-1 text-sm text-gray-500">
+                      {step.description}
+                    </p>
                   </div>
-                );
-              })}
-            </div>
-          )}
+                </div>
+              );
+            })}
+          </div>
         </section>
 
-        {/* ====================================================
-            SHIPMENT
-        ===================================================== */}
+        {/* ORDER SUMMARY */}
+
+        <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:p-7">
+          <h2 className="text-lg font-bold text-gray-900">
+            Order Summary
+          </h2>
+
+          <p className="mt-1 text-sm text-gray-500">
+            {order.order_items.length}{" "}
+            {order.order_items.length === 1
+              ? "item"
+              : "items"}
+          </p>
+
+          <div className="mt-6 space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-sm text-gray-600">
+                Products Total
+              </span>
+
+              <span className="font-medium text-gray-900">
+                {formatCurrency(order.total_amount)}
+              </span>
+            </div>
+
+            {!isPickup && (
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm text-gray-600">
+                    Delivery Fee
+                  </p>
+
+                  {order.delivery_fee_status === "PENDING" && (
+                    <p className="mt-1 text-xs text-yellow-600">
+                      Payment pending
+                    </p>
+                  )}
+
+                  {order.delivery_fee_status === "PAID" && (
+                    <p className="mt-1 text-xs text-green-600">
+                      Payment confirmed
+                    </p>
+                  )}
+                </div>
+
+                <span className="font-medium text-gray-900">
+                  {formatCurrency(order.delivery_fee)}
+                </span>
+              </div>
+            )}
+
+            <div className="border-t border-gray-200 pt-4">
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-base font-semibold text-gray-900">
+                  Total Order Cost
+                </span>
+
+                <span className="text-2xl font-bold text-gray-900">
+                  {formatCurrency(
+                    order.total_amount +
+                      (isPickup ? 0 : order.delivery_fee)
+                  )}
+                </span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* SHIPMENT */}
 
         {!isPickup && shipment && (
           <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:p-7">
@@ -752,9 +953,7 @@ const MyOrderDetails = () => {
           </section>
         )}
 
-        {/* ====================================================
-            PAYMENT
-        ===================================================== */}
+        {/* PAYMENT */}
 
         <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:p-7">
           <div className="flex items-start gap-4">
@@ -773,52 +972,253 @@ const MyOrderDetails = () => {
             </div>
           </div>
 
-          {payment ? (
-            <div className="mt-6 grid gap-4 sm:grid-cols-3">
-              <div className="rounded-xl bg-gray-50 p-4">
-                <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                  Method
-                </p>
+          <div className="mt-6 space-y-4">
 
-                <p className="mt-1 font-semibold text-gray-900">
-                  {payment.method}
-                </p>
+            {/* PRODUCT PAYMENT */}
+
+            {productPayment && (
+              <div className="rounded-xl border border-gray-200 p-4">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="font-semibold text-gray-900">
+                      Product Payment
+                    </p>
+
+                    <p className="mt-1 text-sm text-gray-500">
+                      {productPayment.method}
+                    </p>
+                  </div>
+
+                  <div className="sm:text-right">
+                    <p className="font-semibold text-gray-900">
+                      {formatCurrency(productPayment.amount)}
+                    </p>
+
+                    <span
+                      className={`mt-1 inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getPaymentClass(
+                        productPayment.status
+                      )}`}
+                    >
+                      {formatStatus(productPayment.status)}
+                    </span>
+                  </div>
+                </div>
+
+               {productPayment.status !== "PAID" &&
+  !productPayment.proof_url && (
+    <div className="mt-4">
+      <label className="block text-sm font-medium text-gray-700">
+        Upload Product Payment Proof
+      </label>
+
+      <input
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        onChange={(event) => {
+          setProductProofFile(
+            event.target.files?.[0] ?? null
+          );
+        }}
+        className="mt-2 block w-full text-sm text-gray-600"
+      />
+
+      {productProofFile && (
+        <p className="mt-2 text-xs text-gray-500">
+          Selected: {productProofFile.name}
+        </p>
+      )}
+
+      <button
+        type="button"
+        onClick={handleUploadProductProof}
+        disabled={
+          !productProofFile ||
+          isUploadingProductProof
+        }
+        className="mt-3 w-full rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {isUploadingProductProof
+          ? "Uploading..."
+          : "Upload Payment Proof"}
+      </button>
+    </div>
+  )}
+
+  {productPaymentMessage && (
+  <p className="mt-3 rounded-lg bg-gray-50 p-3 text-sm text-gray-600">
+    {productPaymentMessage}
+  </p>
+)}
               </div>
+            )}
 
-              <div className="rounded-xl bg-gray-50 p-4">
-                <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                  Amount
-                </p>
+            {/* DELIVERY PAYMENT */}
 
-                <p className="mt-1 font-semibold text-gray-900">
-                  {formatCurrency(payment.amount)}
-                </p>
+            {!isPickup && order.delivery_fee > 0 && (
+              <div className="rounded-xl border border-gray-200 p-4">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="font-semibold text-gray-900">
+                      Delivery Payment
+                    </p>
+
+                    <p className="mt-1 text-sm text-gray-500">
+                      Delivery fee
+                    </p>
+                  </div>
+
+                  <div className="sm:text-right">
+                    <p className="font-semibold text-gray-900">
+                      {formatCurrency(order.delivery_fee)}
+                    </p>
+                  </div>
+                </div>
+
+                
+
+                {/* DELIVERY PAYMENT EXISTS */}
+
+                {deliveryPaymentRecord && (
+                  <div className="mt-4 rounded-xl bg-gray-50 p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                          Payment Method
+                        </p>
+
+                        <p className="mt-1 font-semibold text-gray-900">
+                          {deliveryPaymentRecord.method}
+                        </p>
+                      </div>
+
+                      <span
+                        className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${getPaymentClass(
+                          deliveryPaymentRecord.status
+                        )}`}
+                      >
+                        {formatStatus(
+                          deliveryPaymentRecord.status
+                        )}
+                      </span>
+                    </div>
+
+                    <p className="mt-3 text-sm font-medium text-gray-900">
+                      Amount:{" "}
+                      {formatCurrency(
+                        deliveryPaymentRecord.amount
+                      )}
+                    </p>
+
+                   
+
+                    {/* UPLOAD DELIVERY PROOF */}
+
+                    {deliveryPaymentRecord.status !== "PAID" &&
+                      !deliveryPaymentRecord.proof_url && (
+                        <div className="mt-4">
+                          <label className="block text-sm font-medium text-gray-700">
+                            Upload Delivery Payment Proof
+                          </label>
+
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            onChange={(event) => {
+                              setDeliveryProofFile(
+                                event.target.files?.[0] ?? null
+                              );
+                            }}
+                            className="mt-2 block w-full text-sm text-gray-600"
+                          />
+
+                          {deliveryProofFile && (
+                            <p className="mt-2 text-xs text-gray-500">
+                              Selected:{" "}
+                              {deliveryProofFile.name}
+                            </p>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={handleUploadDeliveryProof}
+                            disabled={
+                              !deliveryProofFile ||
+                              isUploadingDeliveryProof
+                            }
+                            className="mt-3 w-full rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {isUploadingDeliveryProof
+                              ? "Uploading..."
+                              : "Upload Delivery Proof"}
+                          </button>
+                        </div>
+                      )}
+                  </div>
+                )}
+
+                {/* DELIVERY PAYMENT DOES NOT EXIST */}
+
+                {!deliveryPaymentRecord &&
+                  order.delivery_fee_status !== "PAID" && (
+                    <div className="mt-4 rounded-xl bg-yellow-50 p-4">
+                      <p className="text-sm font-medium text-yellow-900">
+                        Delivery fee payment is required.
+                      </p>
+
+                      <p className="mt-1 text-xs leading-5 text-yellow-700">
+                        Select your payment method to create
+                        the delivery payment.
+                      </p>
+
+                      <select
+                        value={deliveryPaymentMethod}
+                        onChange={(event) => {
+                          setDeliveryPaymentMethod(
+                            event.target.value as
+                              | "GCASH"
+                              | "MAYA"
+                              | "CARD"
+                          );
+                        }}
+                        className="mt-3 w-full rounded-lg border border-yellow-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-gray-900"
+                      >
+                        <option value="GCASH">
+                          GCash
+                        </option>
+
+                        <option value="MAYA">
+                          Maya
+                        </option>
+
+                        <option value="CARD">
+                          Card
+                        </option>
+                      </select>
+
+                      <button
+                        type="button"
+                        onClick={handleCreateDeliveryPayment}
+                        disabled={isCreatingDeliveryPayment}
+                        className="mt-3 w-full rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {isCreatingDeliveryPayment
+                          ? "Preparing Payment..."
+                          : "Continue to Delivery Payment"}
+                      </button>
+                    </div>
+                  )}
+
+                {deliveryPaymentMessage && (
+                  <p className="mt-3 rounded-lg bg-gray-50 p-3 text-sm text-red-600">
+                    {deliveryPaymentMessage}
+                  </p>
+                )}
               </div>
-
-              <div className="rounded-xl bg-gray-50 p-4">
-                <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                  Status
-                </p>
-
-                <span
-                  className={`mt-2 inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getPaymentClass(
-                    payment.status
-                  )}`}
-                >
-                  {formatStatus(payment.status)}
-                </span>
-              </div>
-            </div>
-          ) : (
-            <p className="mt-5 rounded-xl bg-gray-50 p-4 text-sm text-gray-500">
-              No payment information available.
-            </p>
-          )}
+            )}
+          </div>
         </section>
 
-        {/* ====================================================
-            DELIVERY / PICKUP
-        ===================================================== */}
+        {/* DELIVERY / PICKUP */}
 
         <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:p-7">
           <div className="flex items-start gap-4">
@@ -911,15 +1311,13 @@ const MyOrderDetails = () => {
           </div>
         </section>
 
-        {/* ====================================================
-            ORDER TOTAL
-        ===================================================== */}
+        {/* ORDER TOTAL */}
 
         <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:p-7">
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-sm text-gray-500">
-                Order Total
+                Total Order Cost
               </p>
 
               <p className="mt-1 text-sm text-gray-400">
@@ -931,12 +1329,16 @@ const MyOrderDetails = () => {
             </div>
 
             <p className="text-2xl font-bold text-gray-900">
-              {formatCurrency(order.total_amount)}
+              {formatCurrency(
+                order.total_amount +
+                  (isPickup ? 0 : order.delivery_fee)
+              )}
             </p>
           </div>
         </section>
 
         {/* FOOTER */}
+
         <div className="pb-8 pt-6 text-center">
           <Link
             to="/my-orders"

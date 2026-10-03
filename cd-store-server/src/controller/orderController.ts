@@ -265,15 +265,15 @@ export const createOrder = async (
     const {
       error: paymentError,
     } = await supabase
-      .from("payments")
-      .insert({
-        order_id: order.id,
+ .from("payments")
+  .insert({
+    order_id: order.id,
+    method: payment_method,
+    amount: totalAmount,
 
-        method: payment_method,
+    status: "PENDING",
 
-        amount: totalAmount,
-
-        status: "PENDING",
+    payment_type: "PRODUCT"
       });
 
 
@@ -392,6 +392,7 @@ export const getOrderById = async (
         method,
         amount,
         status,
+        payment_type,
         proof_url,
         paid_at
       `)
@@ -511,14 +512,15 @@ export const getAllOrders = async (
           unit_price
         ),
         payments (
-          id,
-          method,
-          amount,
-          status,
-          proof_url,
-          provider_reference,
-          paid_at
-        ),
+  id,
+  method,
+  amount,
+  status,
+  payment_type,
+  proof_url,
+  provider_reference,
+  paid_at
+),
         shipments (
           id,
           courier,
@@ -618,6 +620,82 @@ console.log("BODY:", req.body);
 
     return res.status(500).json({
       message: "Failed to update order status.",
+    });
+  }
+};
+
+export const updateDeliveryFee = async (
+  req: AuthenticatedRequest,
+  res: Response
+) => {
+  try {
+    const { orderId } = req.params;
+    const { delivery_fee } = req.body ?? {};
+
+    if (!orderId) {
+      return res.status(400).json({
+        message: "Order ID is required.",
+      });
+    }
+
+    const fee = Number(delivery_fee);
+
+    if (!Number.isFinite(fee) || fee < 0) {
+      return res.status(400).json({
+        message: "Delivery fee must be a valid number greater than or equal to 0.",
+      });
+    }
+
+    const { data: order, error: orderError } = await supabase
+      .from("orders")
+      .select("id, delivery_method")
+      .eq("id", orderId)
+      .single();
+
+    if (orderError || !order) {
+      return res.status(404).json({
+        message: "Order not found.",
+      });
+    }
+
+    // Store pickup does not have a delivery fee.
+    if (order.delivery_method === "STORE_PICKUP" && fee > 0) {
+      return res.status(400).json({
+        message: "Store pickup orders cannot have a delivery fee.",
+      });
+    }
+
+    const deliveryFeeStatus = fee > 0 ? "PENDING" : "NOT_SET";
+
+    const { data, error } = await supabase
+      .from("orders")
+      .update({
+        delivery_fee: fee,
+        delivery_fee_status: deliveryFeeStatus,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", orderId)
+      .select("id, delivery_fee, delivery_fee_status, updated_at")
+      .single();
+
+    if (error) {
+      console.error("Failed to update delivery fee:", error);
+
+      return res.status(500).json({
+        message: "Failed to update delivery fee.",
+        error: error.message,
+      });
+    }
+
+    return res.status(200).json({
+      message: "Delivery fee updated successfully.",
+      data,
+    });
+  } catch (error) {
+    console.error("Update delivery fee error:", error);
+
+    return res.status(500).json({
+      message: "Failed to update delivery fee.",
     });
   }
 };
@@ -851,15 +929,16 @@ export const getMyOrders = async (
           quantity,
           unit_price
         ),
-        payments (
-          id,
-          method,
-          amount,
-          status,
-          proof_url,
-          provider_reference,
-          paid_at
-        ),
+      payments (
+  id,
+  method,
+  amount,
+  status,
+  payment_type,
+  proof_url,
+  provider_reference,
+  paid_at
+),
         shipments (
           id,
           courier,
