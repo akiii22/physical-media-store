@@ -7,19 +7,19 @@ const AdminLayout = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="flex min-h-screen">
+    <div className="h-screen overflow-hidden bg-gray-100">
+      <div className="flex h-full">
         <AdminSidebar
           mobileOpen={mobileOpen}
           onClose={() => setMobileOpen(false)}
         />
 
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-w-0 flex-1 flex-col lg:ml-72">
           <AdminMobileHeader
             onMenuClick={() => setMobileOpen(true)}
           />
 
-          <main className="flex-1">
+          <main className="min-h-0 flex-1 overflow-y-auto">
             <Outlet />
           </main>
         </div>

@@ -62,11 +62,11 @@ type Order = {
     amount: number;
     method: string;
     status: string;
+    payment_type: "PRODUCT" | "DELIVERY";
     proof_url: string | null;
     provider_reference: string | null;
     paid_at: string | null;
   }[];
-
   shipments: {
     id: string;
     courier: string | null;
@@ -116,31 +116,31 @@ const formatStatus = (status: string) =>
 
 const statusClass = (status: string) => {
   const classes: Record<string, string> = {
-    PENDING_PAYMENT: "bg-amber-50 text-amber-700",
-    PAYMENT_FAILED: "bg-red-50 text-red-700",
-    PAID: "bg-blue-50 text-blue-700",
-    PROCESSING: "bg-violet-50 text-violet-700",
-    READY_TO_SHIP: "bg-indigo-50 text-indigo-700",
-    SHIPPED: "bg-orange-50 text-orange-700",
-    DELIVERED: "bg-emerald-50 text-emerald-700",
-    READY_FOR_PICKUP: "bg-cyan-50 text-cyan-700",
-    PICKED_UP: "bg-emerald-50 text-emerald-700",
-    CANCELLED: "bg-gray-100 text-gray-600",
+    PENDING_PAYMENT: "bg-amber-50 text-amber-700 border-amber-200/60",
+    PAYMENT_FAILED: "bg-rose-50 text-rose-700 border-rose-200/60",
+    PAID: "bg-blue-50 text-blue-700 border-blue-200/60",
+    PROCESSING: "bg-violet-50 text-violet-700 border-violet-200/60",
+    READY_TO_SHIP: "bg-indigo-50 text-indigo-700 border-indigo-200/60",
+    SHIPPED: "bg-orange-50 text-orange-700 border-orange-200/60",
+    DELIVERED: "bg-emerald-50 text-emerald-700 border-emerald-200/60",
+    READY_FOR_PICKUP: "bg-cyan-50 text-cyan-700 border-cyan-200/60",
+    PICKED_UP: "bg-emerald-50 text-emerald-700 border-emerald-200/60",
+    CANCELLED: "bg-slate-100 text-slate-600 border-slate-200",
   };
 
-  return classes[status] ?? "bg-gray-100 text-gray-600";
+  return classes[status] ?? "bg-slate-100 text-slate-600 border-slate-200";
 };
 
 const paymentClass = (status: string) => {
   if (status === "PAID") {
-    return "bg-emerald-50 text-emerald-700";
+    return "bg-emerald-50 text-emerald-700 border-emerald-200/60";
   }
 
   if (status === "FAILED") {
-    return "bg-red-50 text-red-700";
+    return "bg-rose-50 text-rose-700 border-rose-200/60";
   }
 
-  return "bg-amber-50 text-amber-700";
+  return "bg-amber-50 text-amber-700 border-amber-200/60";
 };
 
 const AdminOrders = () => {
@@ -177,10 +177,10 @@ const AdminOrders = () => {
   const loadOrders = async (refresh = false) => {
     try {
       if (refresh) {
-  setRefreshing(true);
-} else {
-  setLoading(true);
-}
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
       setError("");
 
       const {
@@ -475,8 +475,9 @@ const AdminOrders = () => {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-100">
-        <p className="text-sm text-gray-500">
+      <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 gap-3">
+        <RefreshCw size={24} className="animate-spin text-slate-600" />
+        <p className="text-sm font-medium text-slate-500">
           Loading orders...
         </p>
       </div>
@@ -484,22 +485,22 @@ const AdminOrders = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 p-4 sm:p-6 lg:p-8">
+    <div className="min-h-screen bg-slate-50/60 p-4 sm:p-6 lg:p-8 text-slate-900">
       <div className="mx-auto max-w-7xl">
 
         {/* Header */}
 
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-sm text-gray-500">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
               Store Management
             </p>
 
-            <h1 className="text-2xl font-bold sm:text-3xl">
+            <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl text-slate-900">
               Orders
             </h1>
 
-            <p className="mt-2 text-sm text-gray-600">
+            <p className="mt-1 text-sm text-slate-500">
               Manage customer orders, payments, and fulfillment.
             </p>
           </div>
@@ -507,10 +508,10 @@ const AdminOrders = () => {
           <button
             onClick={() => loadOrders(true)}
             disabled={refreshing}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-slate-800 active:scale-[0.98] disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-slate-900/20"
           >
             <RefreshCw
-              size={17}
+              size={16}
               className={
                 refreshing ? "animate-spin" : ""
               }
@@ -521,10 +522,13 @@ const AdminOrders = () => {
         </div>
 
         {error && (
-          <div className="mb-6 flex justify-between rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <div className="mb-6 flex items-center justify-between rounded-xl border border-rose-200 bg-rose-50/80 p-4 text-sm font-medium text-rose-700 shadow-sm backdrop-blur-sm">
             <span>{error}</span>
 
-            <button onClick={() => setError("")}>
+            <button
+              onClick={() => setError("")}
+              className="rounded-lg p-1 text-rose-600 hover:bg-rose-100 transition-colors"
+            >
               <X size={18} />
             </button>
           </div>
@@ -532,7 +536,7 @@ const AdminOrders = () => {
 
         {/* Stats */}
 
-        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="mb-6 grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-5">
           {[
             ["ALL", "Total Orders", stats.total],
             [
@@ -563,17 +567,17 @@ const AdminOrders = () => {
                   value as OrderFilter
                 )
               }
-              className={`rounded-2xl border bg-white p-4 text-left shadow-sm ${
+              className={`rounded-2xl border p-4 text-left shadow-sm transition-all active:scale-[0.98] ${
                 statusFilter === value
-                  ? "border-gray-900 ring-1 ring-gray-900"
-                  : "border-gray-200"
+                  ? "border-slate-900 bg-white ring-2 ring-slate-900/10 shadow-md"
+                  : "border-slate-200/80 bg-white hover:border-slate-300 hover:bg-slate-50/50"
               }`}
             >
-              <span className="text-sm text-gray-500">
+              <span className="text-xs font-medium text-slate-500">
                 {label}
               </span>
 
-              <p className="mt-3 text-2xl font-bold">
+              <p className="mt-2 text-2xl font-bold tracking-tight text-slate-900">
                 {count}
               </p>
             </button>
@@ -582,12 +586,12 @@ const AdminOrders = () => {
 
         {/* Filters */}
 
-        <div className="mb-6 rounded-2xl border bg-white p-4 shadow-sm">
+        <div className="mb-6 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-3 lg:flex-row">
             <div className="relative flex-1">
               <Search
                 size={18}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
               />
 
               <input
@@ -596,7 +600,7 @@ const AdminOrders = () => {
                   setSearch(e.target.value)
                 }
                 placeholder="Search order ID, customer, email, or phone..."
-                className="h-11 w-full rounded-xl border bg-gray-50 pl-10 pr-4 text-sm outline-none focus:border-gray-900 focus:bg-white"
+                className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50/60 pl-10 pr-4 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10"
               />
             </div>
 
@@ -607,7 +611,7 @@ const AdminOrders = () => {
                   e.target.value as OrderFilter
                 )
               }
-              className="h-11 rounded-xl border bg-gray-50 px-4 text-sm lg:w-52"
+              className="h-11 rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 text-sm font-medium text-slate-700 outline-none transition-all focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 lg:w-52"
             >
               {orderStatuses.map((status) => (
                 <option
@@ -626,7 +630,7 @@ const AdminOrders = () => {
                   e.target.value as DeliveryFilter
                 )
               }
-              className="h-11 rounded-xl border bg-gray-50 px-4 text-sm lg:w-48"
+              className="h-11 rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 text-sm font-medium text-slate-700 outline-none transition-all focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 lg:w-48"
             >
               <option value="ALL">
                 All fulfillment
@@ -646,40 +650,48 @@ const AdminOrders = () => {
             </select>
           </div>
 
-          <p className="mt-3 text-xs text-gray-500">
+          <p className="mt-3 text-xs text-slate-500">
             Showing{" "}
-            <b>{filteredOrders.length}</b> of{" "}
-            <b>{orders.length}</b> orders
+            <b className="font-semibold text-slate-900">{filteredOrders.length}</b> of{" "}
+            <b className="font-semibold text-slate-900">{orders.length}</b> orders
           </p>
         </div>
 
-        {/* Orders */}
+        {/* Orders Table */}
 
-        <div className="overflow-hidden rounded-2xl border bg-white shadow-sm">
+        <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
           {filteredOrders.length === 0 ? (
-            <div className="p-16 text-center text-sm text-gray-500">
-              No orders found.
+            <div className="flex flex-col items-center justify-center p-16 text-center">
+              <Package className="mb-2 text-slate-300" size={32} />
+              <p className="text-sm font-medium text-slate-500">
+                No orders found.
+              </p>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[950px]">
-                <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
+              <table className="w-full min-w-[950px] border-collapse text-left">
+                <thead className="bg-slate-50/80 text-[11px] font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-200/80">
                   <tr>
-                    <th className="px-5 py-4">Order</th>
-                    <th className="px-5 py-4">Customer</th>
-                    <th className="px-5 py-4">Total</th>
-                    <th className="px-5 py-4">Payment</th>
-                    <th className="px-5 py-4">Fulfillment</th>
-                    <th className="px-5 py-4">Status</th>
-                    <th className="px-5 py-4">Date</th>
-                    <th className="px-5 py-4"></th>
+                    <th className="px-5 py-3.5">Order</th>
+                    <th className="px-5 py-3.5">Customer</th>
+                    <th className="px-5 py-3.5">Total</th>
+                    <th className="px-5 py-3.5">Payment</th>
+                    <th className="px-5 py-3.5">Fulfillment</th>
+                    <th className="px-5 py-3.5">Status</th>
+                    <th className="px-5 py-3.5">Date</th>
+                    <th className="px-5 py-3.5 text-right">Action</th>
                   </tr>
                 </thead>
 
-                <tbody className="divide-y">
+                <tbody className="divide-y divide-slate-100 text-sm">
                   {filteredOrders.map((order) => {
-                    const payment =
-                      order.payments?.[0];
+                    const productPayment = order.payments?.find(
+                      (payment) => payment.payment_type === "PRODUCT"
+                    );
+
+                    const deliveryPayment = order.payments?.find(
+                      (payment) => payment.payment_type === "DELIVERY"
+                    );
 
                     const shipment =
                       order.shipments?.[0];
@@ -696,14 +708,14 @@ const AdminOrders = () => {
                     return (
                       <tr
                         key={order.id}
-                        className="hover:bg-gray-50"
+                        className="hover:bg-slate-50/80 transition-colors"
                       >
-                        <td className="px-5 py-5">
-                          <p className="font-mono text-sm font-semibold">
+                        <td className="px-5 py-4 align-top">
+                          <p className="font-mono text-xs font-bold text-slate-900">
                             #{order.id.slice(0, 8)}
                           </p>
 
-                          <p className="text-xs text-gray-400">
+                          <p className="mt-0.5 text-xs text-slate-400 font-medium">
                             {order.order_items.length}{" "}
                             {order.order_items.length === 1
                               ? "item"
@@ -711,61 +723,93 @@ const AdminOrders = () => {
                           </p>
                         </td>
 
-                        <td className="px-5 py-5">
-                          <p className="font-medium">
+                        <td className="px-5 py-4 align-top">
+                          <p className="font-medium text-slate-900">
                             {order.recipient_name}
                           </p>
 
-                          <p className="max-w-[180px] truncate text-xs text-gray-500">
+                          <p className="max-w-[180px] truncate text-xs text-slate-500 mt-0.5">
                             {order.users?.email}
                           </p>
                         </td>
 
-                        {/* UPDATED TOTAL */}
+                        {/* TOTAL */}
 
-                        <td className="px-5 py-5">
-                          <p className="font-semibold">
+                        <td className="px-5 py-4 align-top">
+                          <p className="font-bold text-slate-900">
                             {money(grandTotal)}
                           </p>
 
-                          <p className="text-xs text-gray-500">
+                          <p className="text-[11px] text-slate-500 mt-0.5">
                             Products: {money(productTotal)}
                           </p>
 
                           {deliveryFee > 0 && (
-                            <p className="text-xs text-gray-500">
+                            <p className="text-[11px] text-slate-500">
                               Delivery: {money(deliveryFee)}
                             </p>
                           )}
                         </td>
 
-                        <td className="px-5 py-5">
-                          {payment ? (
-                            <>
-                              <p className="text-sm">
-                                {payment.method}
-                              </p>
+                        <td className="px-5 py-4 align-top">
+                          <div className="space-y-2">
+                            {productPayment && (
+                              <div>
+                                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                                  Product
+                                </p>
 
-                              <span
-                                className={`rounded-full px-2 py-1 text-[11px] font-semibold ${paymentClass(
-                                  payment.status
-                                )}`}
-                              >
-                                {payment.status}
-                              </span>
-                            </>
-                          ) : (
-                            "—"
-                          )}
+                                <div className="mt-1 flex items-center gap-1.5">
+                                  <span className="text-xs font-medium text-slate-700">
+                                    {productPayment.method}
+                                  </span>
+
+                                  <span
+                                    className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold ${paymentClass(
+                                      productPayment.status
+                                    )}`}
+                                  >
+                                    {productPayment.status}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+
+                            {deliveryPayment && (
+                              <div>
+                                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                                  Delivery
+                                </p>
+
+                                <div className="mt-1 flex items-center gap-1.5">
+                                  <span className="text-xs font-medium text-slate-700">
+                                    {deliveryPayment.method}
+                                  </span>
+
+                                  <span
+                                    className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold ${paymentClass(
+                                      deliveryPayment.status
+                                    )}`}
+                                  >
+                                    {deliveryPayment.status}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+
+                            {!productPayment && !deliveryPayment && (
+                              <span className="text-xs text-slate-400">—</span>
+                            )}
+                          </div>
                         </td>
 
-                        <td className="px-5 py-5">
-                          <div className="flex items-center gap-2">
+                        <td className="px-5 py-4 align-top">
+                          <div className="flex items-center gap-1.5 text-xs font-medium text-slate-700">
                             {order.delivery_method ===
                             "STORE_PICKUP" ? (
-                              <MapPin size={15} />
+                              <MapPin size={14} className="text-slate-400" />
                             ) : (
-                              <Truck size={15} />
+                              <Truck size={14} className="text-slate-400" />
                             )}
 
                             <span>
@@ -780,15 +824,15 @@ const AdminOrders = () => {
                           </div>
 
                           {shipment?.tracking_number && (
-                            <p className="text-xs text-gray-400">
+                            <p className="mt-1 font-mono text-[11px] text-slate-400">
                               {shipment.tracking_number}
                             </p>
                           )}
                         </td>
 
-                        <td className="px-5 py-5">
+                        <td className="px-5 py-4 align-top">
                           <span
-                            className={`rounded-full px-2 py-1 text-[11px] font-semibold ${statusClass(
+                            className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-bold ${statusClass(
                               order.status
                             )}`}
                           >
@@ -798,28 +842,32 @@ const AdminOrders = () => {
                           </span>
                         </td>
 
-                        <td className="px-5 py-5 text-xs text-gray-500">
-                          <CalendarDays
-                            size={14}
-                            className="mr-1 inline"
-                          />
+                        <td className="px-5 py-4 align-top text-xs text-slate-500 whitespace-nowrap">
+                          <div className="flex items-center gap-1">
+                            <CalendarDays
+                              size={13}
+                              className="text-slate-400"
+                            />
 
-                          {new Date(
-                            order.created_at
-                          ).toLocaleDateString(
-                            "en-PH"
-                          )}
+                            <span>
+                              {new Date(
+                                order.created_at
+                              ).toLocaleDateString(
+                                "en-PH"
+                              )}
+                            </span>
+                          </div>
                         </td>
 
-                        <td className="px-5 py-5 text-right">
+                        <td className="px-5 py-4 align-top text-right">
                           <button
                             onClick={() =>
                               setSelectedOrder(order)
                             }
-                            className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold hover:bg-gray-900 hover:text-white"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200/80 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-900 hover:text-white hover:border-slate-900 active:scale-95"
                           >
                             View
-                            <ArrowRight size={14} />
+                            <ArrowRight size={13} />
                           </button>
                         </td>
                       </tr>
@@ -837,24 +885,24 @@ const AdminOrders = () => {
       {selectedOrder && (
         <>
           <div
-            className="fixed inset-0 z-40 bg-black/40"
+            className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm transition-opacity"
             onClick={() =>
               !busyId && setSelectedOrder(null)
             }
           />
 
-          <aside className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col bg-white shadow-2xl">
-            <div className="flex justify-between border-b p-5">
+          <aside className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col bg-white shadow-2xl border-l border-slate-200/80">
+            <div className="flex items-center justify-between border-b border-slate-100 p-5 bg-slate-50/50">
               <div>
-                <p className="text-xs uppercase text-gray-400">
-                  Order
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                  Order Details
                 </p>
 
-                <h2 className="font-mono text-lg font-bold">
+                <h2 className="font-mono text-lg font-bold text-slate-900">
                   #{selectedOrder.id.slice(0, 8)}
                 </h2>
 
-                <p className="text-xs text-gray-500">
+                <p className="text-xs font-medium text-slate-500 mt-0.5">
                   {new Date(
                     selectedOrder.created_at
                   ).toLocaleString("en-PH")}
@@ -866,8 +914,9 @@ const AdminOrders = () => {
                   !busyId &&
                   setSelectedOrder(null)
                 }
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
               >
-                <X />
+                <X size={20} />
               </button>
             </div>
 
@@ -877,21 +926,21 @@ const AdminOrders = () => {
                 {/* Customer */}
 
                 <section>
-                  <h3 className="mb-3 flex items-center gap-2 font-semibold">
-                    <User size={17} />
+                  <h3 className="mb-2.5 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+                    <User size={15} className="text-slate-400" />
                     Customer
                   </h3>
 
-                  <div className="rounded-xl border bg-gray-50 p-4">
-                    <p className="font-medium">
+                  <div className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-4 space-y-1">
+                    <p className="font-semibold text-slate-900">
                       {selectedOrder.recipient_name}
                     </p>
 
-                    <p className="text-sm text-gray-500">
+                    <p className="text-xs text-slate-500">
                       {selectedOrder.users?.email}
                     </p>
 
-                    <p className="text-sm text-gray-500">
+                    <p className="text-xs text-slate-500 font-mono">
                       {selectedOrder.phone}
                     </p>
                   </div>
@@ -900,43 +949,47 @@ const AdminOrders = () => {
                 {/* Items + Total */}
 
                 <section>
-                  <h3 className="mb-3 flex items-center gap-2 font-semibold">
-                    <ShoppingBag size={17} />
+                  <h3 className="mb-2.5 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+                    <ShoppingBag size={15} className="text-slate-400" />
                     Order Items
                   </h3>
 
-                  <div className="divide-y rounded-xl border">
-                    {selectedOrder.order_items.map(
-                      (item) => (
-                        <div
-                          key={item.id}
-                          className="flex justify-between p-4 text-sm"
-                        >
-                          <span>
-                            Quantity: {item.quantity}
+                  <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white">
+                    <div className="divide-y divide-slate-100">
+                      {selectedOrder.order_items.map(
+                        (item) => (
+                          <div
+                            key={item.id}
+                            className="flex items-center justify-between p-3.5 text-sm"
+                          >
+                            <div>
+                              <p className="font-medium text-slate-800">
+                                Quantity: {item.quantity}
+                              </p>
 
-                            <p className="font-mono text-xs text-gray-400">
-                              {item.product_id.slice(
-                                0,
-                                8
+                              <p className="font-mono text-xs text-slate-400">
+                                ID: {item.product_id.slice(
+                                  0,
+                                  8
+                                )}
+                              </p>
+                            </div>
+
+                            <b className="font-semibold text-slate-900">
+                              {money(
+                                item.unit_price *
+                                  item.quantity
                               )}
-                            </p>
-                          </span>
+                            </b>
+                          </div>
+                        )
+                      )}
+                    </div>
 
-                          <b>
-                            {money(
-                              item.unit_price *
-                                item.quantity
-                            )}
-                          </b>
-                        </div>
-                      )
-                    )}
-
-                    <div className="space-y-2 bg-gray-50 p-4 text-sm">
+                    <div className="space-y-2 bg-slate-50/80 border-t border-slate-100 p-4 text-sm text-slate-600">
                       <div className="flex justify-between">
                         <span>Products</span>
-                        <b>
+                        <b className="font-semibold text-slate-900">
                           {money(
                             selectedOrder.total_amount
                           )}
@@ -945,7 +998,7 @@ const AdminOrders = () => {
 
                       <div className="flex justify-between">
                         <span>Delivery</span>
-                        <b>
+                        <b className="font-semibold text-slate-900">
                           {selectedOrder.delivery_method ===
                           "STORE_PICKUP"
                             ? "Free"
@@ -955,10 +1008,10 @@ const AdminOrders = () => {
                         </b>
                       </div>
 
-                      <div className="flex justify-between border-t pt-2 text-base">
-                        <b>Total</b>
+                      <div className="flex justify-between border-t border-slate-200/80 pt-2.5 text-base font-bold text-slate-900">
+                        <span>Total</span>
 
-                        <b>
+                        <span>
                           {money(
                             Number(
                               selectedOrder.total_amount
@@ -968,7 +1021,7 @@ const AdminOrders = () => {
                                   0
                               )
                           )}
-                        </b>
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -977,62 +1030,62 @@ const AdminOrders = () => {
                 {/* Payment */}
 
                 <section>
-                  <h3 className="mb-3 flex items-center gap-2 font-semibold">
-                    <CreditCard size={17} />
-                    Payment
+                  <h3 className="mb-2.5 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+                    <CreditCard size={15} className="text-slate-400" />
+                    Payments
                   </h3>
 
-                  <div className="rounded-xl border p-4">
-                    {selectedOrder.payments?.[0] ? (
-                      <div className="flex justify-between">
-                        <div>
-                          <p className="font-medium">
-                            {
-                              selectedOrder
-                                .payments[0].method
-                            }
-                          </p>
-
-                          <p className="text-sm text-gray-500">
-                            {money(
-                              selectedOrder
-                                .payments[0].amount
-                            )}
-                          </p>
-                        </div>
-
-                        <span
-                          className={`rounded-full px-2 py-1 text-[11px] font-semibold ${paymentClass(
-                            selectedOrder
-                              .payments[0].status
-                          )}`}
+                  <div className="space-y-3 rounded-xl border border-slate-200/80 bg-white p-4">
+                    {selectedOrder.payments?.length ? (
+                      selectedOrder.payments.map((payment) => (
+                        <div
+                          key={payment.id}
+                          className="rounded-lg border border-slate-200/80 bg-slate-50/50 p-3.5"
                         >
-                          {
-                            selectedOrder
-                              .payments[0].status
-                          }
-                        </span>
-                      </div>
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">
+                                  {payment.payment_type === "PRODUCT"
+                                    ? "Product Payment"
+                                    : "Delivery Payment"}
+                                </span>
+                              </div>
+
+                              <p className="mt-2 font-semibold text-slate-900">
+                                {payment.method}
+                              </p>
+
+                              <p className="text-xs font-medium text-slate-500 mt-0.5">
+                                {money(payment.amount)}
+                              </p>
+                            </div>
+
+                            <span
+                              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold ${paymentClass(
+                                payment.status
+                              )}`}
+                            >
+                              {payment.status}
+                            </span>
+                          </div>
+
+                          {payment.proof_url && (
+                            <a
+                              href={payment.proof_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mt-3 inline-block text-xs font-semibold text-slate-900 hover:text-slate-700 underline underline-offset-2"
+                            >
+                              View Payment Proof →
+                            </a>
+                          )}
+                        </div>
+                      ))
                     ) : (
-                      <p className="text-sm text-gray-500">
+                      <p className="text-xs text-slate-400">
                         No payment information.
                       </p>
-                    )}
-
-                    {selectedOrder.payments?.[0]
-                      ?.proof_url && (
-                      <a
-                        href={
-                          selectedOrder
-                            .payments[0]
-                            .proof_url
-                        }
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-3 inline-block text-sm text-blue-600"
-                      >
-                        View Payment Proof →
-                      </a>
                     )}
                   </div>
                 </section>
@@ -1040,19 +1093,19 @@ const AdminOrders = () => {
                 {/* Delivery */}
 
                 <section>
-                  <h3 className="mb-3 flex items-center gap-2 font-semibold">
+                  <h3 className="mb-2.5 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
                     {selectedOrder.delivery_method ===
                     "STORE_PICKUP" ? (
-                      <MapPin size={17} />
+                      <MapPin size={15} className="text-slate-400" />
                     ) : (
-                      <Truck size={17} />
+                      <Truck size={15} className="text-slate-400" />
                     )}
 
                     Fulfillment
                   </h3>
 
-                  <div className="rounded-xl border p-4">
-                    <p className="font-medium">
+                  <div className="rounded-xl border border-slate-200/80 bg-white p-4">
+                    <p className="font-semibold text-slate-900">
                       {selectedOrder.delivery_method ===
                       "STORE_PICKUP"
                         ? "Store Pickup"
@@ -1065,7 +1118,7 @@ const AdminOrders = () => {
                     {selectedOrder.delivery_method !==
                       "STORE_PICKUP" && (
                       <>
-                        <div className="mt-3 text-sm text-gray-500">
+                        <div className="mt-2 text-xs leading-relaxed text-slate-500">
                           {selectedOrder.street_address}
                           <br />
                           {selectedOrder.barangay},{" "}
@@ -1075,18 +1128,19 @@ const AdminOrders = () => {
                           {selectedOrder.postal_code}
                         </div>
 
-                        <div className="mt-4 rounded-lg bg-gray-50 p-3">
-                          <p className="text-xs uppercase text-gray-500">
+                        <div className="mt-4 rounded-lg bg-slate-50/80 border border-slate-200/60 p-3">
+                          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                             Delivery Fee
                           </p>
 
-                          <p className="font-semibold">
+                          <p className="font-bold text-slate-900 mt-0.5">
                             {money(
                               selectedOrder.delivery_fee
                             )}
                           </p>
 
-                          <p className="text-xs text-gray-500">
+                          <p className="text-[11px] font-medium text-slate-500 mt-0.5">
+                            Status:{" "}
                             {selectedOrder.delivery_fee_status ===
                             "PENDING"
                               ? "Awaiting payment"
@@ -1119,7 +1173,7 @@ const AdminOrders = () => {
                                   })
                                 )
                               }
-                              className="w-full rounded-lg border px-3 py-2 text-sm"
+                              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none transition-all focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
                             />
 
                             <button
@@ -1132,7 +1186,7 @@ const AdminOrders = () => {
                                 busyId ===
                                 selectedOrder.id
                               }
-                              className="rounded-lg bg-gray-900 px-4 text-sm font-semibold text-white disabled:opacity-50"
+                              className="rounded-lg bg-slate-900 px-4 text-xs font-semibold text-white transition-all hover:bg-slate-800 active:scale-95 disabled:opacity-50 whitespace-nowrap"
                             >
                               {busyId ===
                               selectedOrder.id
@@ -1151,12 +1205,12 @@ const AdminOrders = () => {
                 {selectedOrder.delivery_method !==
                   "STORE_PICKUP" && (
                   <section>
-                    <h3 className="mb-3 flex items-center gap-2 font-semibold">
-                      <Package size={17} />
+                    <h3 className="mb-2.5 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+                      <Package size={15} className="text-slate-400" />
                       Shipment
                     </h3>
 
-                    <div className="space-y-3 rounded-xl border p-4">
+                    <div className="space-y-3 rounded-xl border border-slate-200/80 bg-white p-4">
                       {(
                         [
                           "courier",
@@ -1189,7 +1243,7 @@ const AdminOrders = () => {
                             "_",
                             " "
                           )}
-                          className="w-full rounded-lg border px-3 py-2.5 text-sm"
+                          className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs text-slate-900 outline-none transition-all placeholder:capitalize placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10"
                         />
                       ))}
 
@@ -1214,7 +1268,7 @@ const AdminOrders = () => {
                             })
                           )
                         }
-                        className="w-full rounded-lg border px-3 py-2.5 text-sm"
+                        className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs text-slate-900 outline-none transition-all focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10"
                       >
                         {[
                           "PENDING",
@@ -1238,7 +1292,7 @@ const AdminOrders = () => {
                         disabled={
                           busyId === selectedOrder.id
                         }
-                        className="w-full rounded-lg bg-gray-900 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                        className="w-full rounded-lg bg-slate-900 py-2 text-xs font-semibold text-white transition-all hover:bg-slate-800 active:scale-95 disabled:opacity-50"
                       >
                         {busyId === selectedOrder.id
                           ? "Updating..."
@@ -1251,12 +1305,12 @@ const AdminOrders = () => {
                 {/* Order Status */}
 
                 <section>
-                  <h3 className="mb-3 flex items-center gap-2 font-semibold">
-                    <CheckCircle2 size={17} />
+                  <h3 className="mb-2.5 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+                    <CheckCircle2 size={15} className="text-slate-400" />
                     Order Status
                   </h3>
 
-                  <div className="flex gap-2 rounded-xl border p-4">
+                  <div className="flex gap-2 rounded-xl border border-slate-200/80 bg-white p-4">
                     <select
                       value={
                         selectedStatuses[
@@ -1273,7 +1327,7 @@ const AdminOrders = () => {
                           })
                         )
                       }
-                      className="h-11 flex-1 rounded-lg border px-3 text-sm"
+                      className="h-10 flex-1 rounded-lg border border-slate-200 bg-slate-50/50 px-3 text-xs text-slate-900 outline-none transition-all focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10"
                     >
                       {orderStatuses
                         .filter(
@@ -1303,7 +1357,7 @@ const AdminOrders = () => {
                           selectedOrder.id
                         ] === selectedOrder.status
                       }
-                      className="rounded-lg bg-gray-900 px-5 text-sm font-semibold text-white disabled:opacity-40"
+                      className="rounded-lg bg-slate-900 px-5 text-xs font-semibold text-white transition-all hover:bg-slate-800 active:scale-95 disabled:opacity-40"
                     >
                       Update
                     </button>

@@ -12,6 +12,7 @@ type PendingPayment = {
   payment_method: "GCASH" | "MAYA" | "CARD";
   amount: number;
   payment_status: string;
+  payment_type: "PRODUCT" | "DELIVERY";
   proof_url: string | null;
   created_at: string;
 
@@ -21,7 +22,7 @@ type PendingPayment = {
     phone: string;
     total_amount: number;
     status: string;
-    delivery_method: "DELIVERY" | "STORE_PICKUP";
+    delivery_method: "DELIVERY" | "SAME_DAY" | "STORE_PICKUP";
     created_at: string;
   } | null;
 };
@@ -71,6 +72,8 @@ useEffect(() => {
       setError("");
 
       const data = await getPendingPayments();
+
+console.log("PENDING PAYMENTS:", data);
 
       if (!cancelled) {
         setPayments(data);
@@ -304,26 +307,35 @@ useEffect(() => {
               {/* Card Header */}
             
 
-              <div className="flex flex-col gap-4 border-b border-gray-200 p-6 sm:flex-row sm:items-center sm:justify-between">
+<div className="flex flex-col gap-4 border-b border-gray-200 p-6 sm:flex-row sm:items-center sm:justify-between">
+  <div>
+    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+      Order Number
+    </p>
 
-                <div>
+    <p className="mt-1 break-all font-mono text-sm font-semibold text-gray-900">
+      {payment.order_id}
+    </p>
+  </div>
 
-                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                    Order Number
-                  </p>
+  <div className="flex flex-wrap items-center gap-2">
+    <span
+      className={`w-fit rounded-full px-3 py-1 text-sm font-semibold ${
+        payment.payment_type === "DELIVERY"
+          ? "bg-blue-100 text-blue-700"
+          : "bg-purple-100 text-purple-700"
+      }`}
+    >
+      {payment.payment_type === "DELIVERY"
+        ? "Delivery Payment"
+        : "Product Payment"}
+    </span>
 
-                  <p className="mt-1 break-all font-mono text-sm font-semibold text-gray-900">
-                    {payment.order_id}
-                  </p>
-
-                </div>
-
-
-                <span className="w-fit rounded-full bg-yellow-100 px-3 py-1 text-sm font-medium text-yellow-700">
-                  {payment.payment_status}
-                </span>
-
-              </div>
+    <span className="w-fit rounded-full bg-yellow-100 px-3 py-1 text-sm font-medium text-yellow-700">
+      {payment.payment_status}
+    </span>
+  </div>
+</div>
 
 
               <div className="grid gap-6 p-6 lg:grid-cols-2">
@@ -347,10 +359,13 @@ useEffect(() => {
                         Customer
                       </p>
 
-                      <p className="font-medium text-gray-900">
-                        {payment.order?.recipient_name ||
-                          "Unknown customer"}
-                      </p>
+                    <p className="font-medium text-gray-900">
+  {payment.order?.delivery_method === "STORE_PICKUP"
+    ? "Pasay Store Pickup"
+    : payment.order?.delivery_method === "SAME_DAY"
+      ? "Same-Day Lalamove"
+      : "Nationwide Delivery"}
+</p>
 
                     </div>
 
@@ -434,7 +449,7 @@ useEffect(() => {
                     <div>
 
                       <p className="text-xs text-gray-500">
-                        Amount Paid
+                        Payment Amount
                       </p>
 
                       <p className="text-xl font-bold text-gray-900">
@@ -445,6 +460,18 @@ useEffect(() => {
                       </p>
 
                     </div>
+
+                    <div>
+  <p className="text-xs text-gray-500">
+    Payment Type
+  </p>
+
+  <p className="font-medium text-gray-900">
+    {payment.payment_type === "DELIVERY"
+      ? "Delivery Fee"
+      : "Product Order"}
+  </p>
+</div>
 
 
                     <div>
@@ -476,9 +503,17 @@ useEffect(() => {
 
                 <div className="border-t border-gray-200 p-6">
 
-                  <h2 className="text-lg font-bold text-gray-900">
-                    Payment Proof
-                  </h2>
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+  <div>
+    <h2 className="text-lg font-bold text-gray-900">
+      Payment Proof
+    </h2>
+
+    <p className="mt-1 text-sm text-gray-500">
+      Review the customer's submitted proof before verifying the payment.
+    </p>
+  </div>
+</div>
 
 
                   <div className="mt-4 overflow-hidden rounded-xl border border-gray-200 bg-gray-50">

@@ -21,6 +21,8 @@ import AddProduct from "./pages/admin/AddProduct";
 import EditProduct from "./pages/admin/EditProduct";
 import AdminManagement from "./pages/admin/AdminManagement";
 import AdminSettings from "./pages/admin/AdminSettings";
+import AdminCustomers from "./pages/admin/AdminCustomer"
+import NotFound from "./pages/NotFound";
 
 const App = () => {
   const location = useLocation();
@@ -155,8 +157,18 @@ const App = () => {
               element={<AdminSettings />}
             />
 
+            <Route
+  path="/admin/customers"
+  element={<AdminCustomers />}
+/>
+
           </Route>
         </Route>
+
+        <Route
+  path="*"
+  element={<NotFound />}
+/>
 
       </Routes>
     </div>
