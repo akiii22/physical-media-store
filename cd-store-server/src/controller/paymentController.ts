@@ -183,13 +183,14 @@ export const getPendingPayments = async (
     } = await supabase
       .from("payments")
       .select(`
-        id,
-        order_id,
-        method,
-        amount,
-        status,
-        proof_url,
-        created_at
+  id,
+  order_id,
+  method,
+  amount,
+  status,
+  payment_type,
+  proof_url,
+  created_at
       `)
       .eq("status", "PENDING")
       .not("proof_url", "is", null)
@@ -299,34 +300,24 @@ export const getPendingPayments = async (
 
         return {
           payment_id: payment.id,
-
-          order_id: payment.order_id,
-
-          payment_method: payment.method,
-
-          amount: payment.amount,
-
-          payment_status: payment.status,
-
-          proof_url: proofUrl,
-
-          created_at: payment.created_at,
-
-          order: order
-            ? {
-                user_id: order.user_id,
-                recipient_name:
-                  order.recipient_name,
-                phone: order.phone,
-                total_amount:
-                  order.total_amount,
-                status: order.status,
-                delivery_method:
-                  order.delivery_method,
-                created_at:
-                  order.created_at,
-              }
-            : null,
+  order_id: payment.order_id,
+  payment_method: payment.method,
+  amount: payment.amount,
+  payment_status: payment.status,
+  payment_type: payment.payment_type,
+  proof_url: proofUrl,
+  created_at: payment.created_at,
+  order: order
+    ? {
+        user_id: order.user_id,
+        recipient_name: order.recipient_name,
+        phone: order.phone,
+        total_amount: order.total_amount,
+        status: order.status,
+        delivery_method: order.delivery_method,
+        created_at: order.created_at,
+      }
+    : null
         };
       })
     );
@@ -777,16 +768,17 @@ export const rejectPayment = async (
   res: Response
 ) => {
   try {
-
     const { paymentId } = req.params;
 
+    // ----------------------------------------------------------
+    // Validate payment ID
+    // ----------------------------------------------------------
 
     if (!paymentId) {
       return res.status(400).json({
         message: "Payment ID is required.",
       });
     }
-
 
     // ----------------------------------------------------------
     // Get payment
@@ -800,11 +792,11 @@ export const rejectPayment = async (
       .select(`
         id,
         order_id,
-        status
+        status,
+        payment_type
       `)
       .eq("id", paymentId)
       .single();
-
 
     if (paymentError || !payment) {
       return res.status(404).json({
@@ -812,14 +804,15 @@ export const rejectPayment = async (
       });
     }
 
+    // ----------------------------------------------------------
+    // Make sure payment is still pending
+    // ----------------------------------------------------------
 
     if (payment.status !== "PENDING") {
       return res.status(400).json({
-        message:
-          "This payment has already been processed.",
+        message: "This payment has already been processed.",
       });
     }
-
 
     // ----------------------------------------------------------
     // Mark payment as FAILED
@@ -834,7 +827,6 @@ export const rejectPayment = async (
       })
       .eq("id", paymentId);
 
-
     if (updatePaymentError) {
       console.error(
         "Payment rejection error:",
@@ -846,20 +838,50 @@ export const rejectPayment = async (
       });
     }
 
+    // ----------------------------------------------------------
+    // Update order depending on payment type
+    // ----------------------------------------------------------
+
+    let updateOrderError;
+
+    if (payment.payment_type === "DELIVERY") {
+      // --------------------------------------------------------
+      // DELIVERY PAYMENT REJECTED
+      // --------------------------------------------------------
+      // Keep the order's current status.
+      // Only make the delivery fee payable again.
+      // --------------------------------------------------------
+
+      const { error } = await supabase
+        .from("orders")
+        .update({
+          delivery_fee_status: "PENDING",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", payment.order_id);
+
+      updateOrderError = error;
+    } else {
+      // --------------------------------------------------------
+      // PRODUCT PAYMENT REJECTED
+      // --------------------------------------------------------
+      // Customer needs to submit product payment again.
+      // --------------------------------------------------------
+
+      const { error } = await supabase
+        .from("orders")
+        .update({
+          status: "PENDING_PAYMENT",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", payment.order_id);
+
+      updateOrderError = error;
+    }
 
     // ----------------------------------------------------------
-    // Keep order waiting for payment
+    // Check order update
     // ----------------------------------------------------------
-
-    const {
-      error: updateOrderError,
-    } = await supabase
-      .from("orders")
-      .update({
-        status: "PENDING_PAYMENT",
-      })
-      .eq("id", payment.order_id);
-
 
     if (updateOrderError) {
       console.error(
@@ -869,27 +891,24 @@ export const rejectPayment = async (
 
       return res.status(500).json({
         message:
-          "Payment rejected but order status could not be updated.",
+          "Payment was rejected but the order could not be updated.",
       });
     }
 
+    // ----------------------------------------------------------
+    // Success response
+    // ----------------------------------------------------------
 
     return res.status(200).json({
       message: "Payment rejected.",
-
       data: {
         payment_id: payment.id,
-
         order_id: payment.order_id,
-
         payment_status: "FAILED",
-
-        order_status: "PENDING_PAYMENT",
+        payment_type: payment.payment_type,
       },
     });
-
   } catch (error) {
-
     console.error(
       "Server error:",
       error
