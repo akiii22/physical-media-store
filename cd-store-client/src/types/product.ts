@@ -18,6 +18,10 @@ export type Product = {
   price: number;
   stock: number;
   image_url: string | null;
+
   categories: Category | null;
   product_images: ProductImage[];
+
+  created_at: string;
+  updated_at: string;
 };

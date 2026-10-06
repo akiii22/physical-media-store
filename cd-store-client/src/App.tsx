@@ -23,6 +23,7 @@ import AdminManagement from "./pages/admin/AdminManagement";
 import AdminSettings from "./pages/admin/AdminSettings";
 import AdminCustomers from "./pages/admin/AdminCustomer"
 import NotFound from "./pages/NotFound";
+import Account from "./pages/Account";
 
 const App = () => {
   const location = useLocation();
@@ -84,6 +85,11 @@ const App = () => {
           <Route
             path="/my-orders/:orderId"
             element={<MyOrderDetails />}
+          />
+
+          <Route
+            path="/account"
+            element={<Account />}
           />
         </Route>
 

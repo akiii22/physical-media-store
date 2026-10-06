@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
+import type { ChangeEvent } from "react";
+
 import { Link, useParams } from "react-router-dom";
+
 import {
   CheckCircle2,
   Copy,
@@ -7,6 +10,7 @@ import {
   FileCheck2,
   FileImage,
   Loader2,
+  Mail,
   Package,
   ShoppingBag,
   Upload,
@@ -115,7 +119,7 @@ const OrderConfirmation = () => {
    */
 
   const handleFileChange = (
-    event: React.ChangeEvent<HTMLInputElement>
+    event: ChangeEvent<HTMLInputElement>
   ) => {
     const selectedFile = event.target.files?.[0];
 
@@ -184,11 +188,6 @@ const OrderConfirmation = () => {
 
       await uploadPaymentProof(orderId, file);
 
-      /*
-       * We don't modify the order object here.
-       *
-       * uploadSuccess controls the UI state instead.
-       */
       setUploadSuccess(true);
     } catch (error) {
       setError(
@@ -282,10 +281,12 @@ const OrderConfirmation = () => {
 
   const hasPaymentProof =
     Boolean(order.payment?.proof_url) || uploadSuccess;
-const deliveryFee = Number(order.delivery_fee ?? 0);
-const hasDeliveryFee =
-  deliveryFee > 0;
-const amountToPayNow = Number(order.total_amount);
+
+  const deliveryFee = Number(order.delivery_fee ?? 0);
+
+  const hasDeliveryFee = deliveryFee > 0;
+
+  const amountToPayNow = Number(order.total_amount);
 
   /*
    * ============================================================
@@ -316,8 +317,8 @@ const amountToPayNow = Number(order.total_amount);
 
           <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-gray-600 sm:text-base">
             Your order has been successfully placed.
-            Follow the payment instructions below to complete
-            your purchase.
+            Please check your registered email for the
+            payment instructions.
           </p>
         </section>
 
@@ -366,62 +367,68 @@ const amountToPayNow = Number(order.total_amount);
           </div>
 
           <div className="grid divide-y divide-gray-100 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-  {/* Payment Method */}
-  <div className="px-6 py-4 sm:px-6">
-    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-      Payment Method
-    </p>
 
-    <p className="mt-1 font-semibold text-gray-900">
-      {paymentMethod}
-    </p>
-  </div>
+            {/* Payment Method */}
+            <div className="px-6 py-4 sm:px-6">
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                Payment Method
+              </p>
 
-  {/* Products */}
-  <div className="px-6 py-4 sm:px-6">
-    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-      Products
-    </p>
+              <p className="mt-1 font-semibold text-gray-900">
+                {paymentMethod}
+              </p>
+            </div>
 
-    <p className="mt-1 font-semibold text-gray-900">
-      ₱{amountToPayNow.toLocaleString()}
-    </p>
-  </div>
+            {/* Products */}
+            <div className="px-6 py-4 sm:px-6">
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                Products
+              </p>
 
-  {/* Delivery */}
-  <div className="px-6 py-4 sm:px-6">
-    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-      Delivery Fee
-    </p>
+              <p className="mt-1 font-semibold text-gray-900">
+                ₱{amountToPayNow.toLocaleString()}
+              </p>
+            </div>
 
-    <p className="mt-1 font-semibold text-gray-900">
-      {hasDeliveryFee
-        ? `₱${deliveryFee.toLocaleString()}`
-        : "To be determined"}
-    </p>
+            {/* Delivery */}
+            <div className="px-6 py-4 sm:px-6">
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                Delivery Fee
+              </p>
 
-    {!hasDeliveryFee && (
-      <p className="mt-0.5 text-xs text-gray-500">
-        Paid separately
-      </p>
-    )}
-  </div>
-</div>
+              <p className="mt-1 font-semibold text-gray-900">
+                {hasDeliveryFee
+                  ? `₱${deliveryFee.toLocaleString()}`
+                  : "To be determined"}
+              </p>
+
+              {!hasDeliveryFee && (
+                <p className="mt-0.5 text-xs text-gray-500">
+                  Paid separately
+                </p>
+              )}
+            </div>
+          </div>
         </section>
 
-        {!hasDeliveryFee && (
-  <div className="mt-3 rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3">
-    <p className="text-sm font-medium text-yellow-800">
-      Delivery fee will be paid separately
-    </p>
+        {/* =====================================================
+            DELIVERY FEE NOTICE
+        ====================================================== */}
 
-    <p className="mt-0.5 text-xs leading-5 text-yellow-700">
-      The store will calculate your delivery fee after reviewing
-      your order. You can pay for the products now and pay the
-      delivery fee separately once it is available.
-    </p>
-  </div>
-)}
+        {!hasDeliveryFee && (
+          <div className="mt-3 rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3">
+            <p className="text-sm font-medium text-yellow-800">
+              Delivery fee will be paid separately
+            </p>
+
+            <p className="mt-0.5 text-xs leading-5 text-yellow-700">
+              The store will calculate your delivery fee after
+              reviewing your order. You can pay for the products
+              now and pay the delivery fee separately once it is
+              available.
+            </p>
+          </div>
+        )}
 
         {/* =====================================================
             WHAT HAPPENS NEXT
@@ -445,9 +452,27 @@ const amountToPayNow = Number(order.total_amount);
           </div>
 
           <div className="mt-6 grid gap-4 sm:grid-cols-3">
+
+            {/* Step 1 */}
             <div className="rounded-xl bg-gray-50 p-4">
               <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-900 text-sm font-bold text-white">
                 1
+              </span>
+
+              <h3 className="mt-4 font-semibold text-gray-900">
+                Check Your Email
+              </h3>
+
+              <p className="mt-1 text-sm leading-5 text-gray-500">
+                Payment instructions will be sent to your
+                registered email address.
+              </p>
+            </div>
+
+            {/* Step 2 */}
+            <div className="rounded-xl bg-gray-50 p-4">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-900 text-sm font-bold text-white">
+                2
               </span>
 
               <h3 className="mt-4 font-semibold text-gray-900">
@@ -455,14 +480,15 @@ const amountToPayNow = Number(order.total_amount);
               </h3>
 
               <p className="mt-1 text-sm leading-5 text-gray-500">
-                Send the exact order amount using your selected
-                payment method.
+                Follow the instructions in the email and pay
+                the exact product amount.
               </p>
             </div>
 
+            {/* Step 3 */}
             <div className="rounded-xl bg-gray-50 p-4">
               <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-900 text-sm font-bold text-white">
-                2
+                3
               </span>
 
               <h3 className="mt-4 font-semibold text-gray-900">
@@ -470,22 +496,8 @@ const amountToPayNow = Number(order.total_amount);
               </h3>
 
               <p className="mt-1 text-sm leading-5 text-gray-500">
-                Upload your payment screenshot or receipt below.
-              </p>
-            </div>
-
-            <div className="rounded-xl bg-gray-50 p-4">
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-900 text-sm font-bold text-white">
-                3
-              </span>
-
-              <h3 className="mt-4 font-semibold text-gray-900">
-                Wait for Verification
-              </h3>
-
-              <p className="mt-1 text-sm leading-5 text-gray-500">
-                The store will verify your payment before
-                processing the order.
+                Upload your payment screenshot or receipt below
+                for verification.
               </p>
             </div>
           </div>
@@ -507,14 +519,16 @@ const amountToPayNow = Number(order.total_amount);
               </h2>
 
               <p className="mt-1 text-sm text-gray-500">
-                Complete your payment using the instructions below.
+                Your payment instructions will be provided through
+                your registered email address.
               </p>
             </div>
           </div>
 
-          {/* Payment summary */}
+          {/* Payment Summary */}
           <div className="mt-6 rounded-xl border border-gray-200 bg-gray-50 p-5">
             <div className="grid gap-4 sm:grid-cols-3">
+
               <div>
                 <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
                   Method
@@ -547,88 +561,45 @@ const amountToPayNow = Number(order.total_amount);
             </div>
           </div>
 
-          {/* GCash */}
-          {order.payment?.method === "GCASH" && (
-            <div className="mt-6 rounded-xl border border-gray-200 p-5">
-              <h3 className="font-semibold text-gray-900">
-                Pay with GCash
-              </h3>
+          {/* Email Instruction Notice */}
+          <div className="mt-6 rounded-xl border border-gray-200 bg-gray-50 p-6">
+            <div className="flex items-start gap-4">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white shadow-sm">
+                <Mail className="h-5 w-5 text-gray-700" />
+              </div>
 
-              <p className="mt-2 text-sm leading-6 text-gray-600">
-                Send the exact amount shown above to the store's
-                GCash account.
-              </p>
+              <div>
+                <h3 className="font-semibold text-gray-900">
+                  Check your email for payment instructions
+                </h3>
 
-              <div className="mt-4 rounded-xl bg-gray-50 p-5">
-                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                  GCash Account
+                <p className="mt-2 text-sm leading-6 text-gray-600">
+                  We will provide the payment details and
+                  instructions through the email address associated
+                  with your account.
                 </p>
 
-                <p className="mt-2 text-lg font-bold text-gray-900">
-                  [CLIENT GCASH NUMBER]
-                </p>
-
-                <p className="mt-1 text-sm text-gray-600">
-                  [CLIENT ACCOUNT NAME]
+                <p className="mt-3 text-sm leading-6 text-gray-600">
+                  After completing the payment, return to this page
+                  or open your order from <strong>My Orders</strong>
+                  to upload your payment receipt.
                 </p>
               </div>
             </div>
-          )}
+          </div>
 
-          {/* Maya */}
-          {order.payment?.method === "MAYA" && (
-            <div className="mt-6 rounded-xl border border-gray-200 p-5">
-              <h3 className="font-semibold text-gray-900">
-                Pay with Maya
-              </h3>
+          {/* Payment method information */}
+          <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-5">
+            <p className="text-sm font-medium text-blue-900">
+              Payment method: {paymentMethod}
+            </p>
 
-              <p className="mt-2 text-sm leading-6 text-gray-600">
-                Send the exact amount shown above to the store's
-                Maya account.
-              </p>
-
-              <div className="mt-4 rounded-xl bg-gray-50 p-5">
-                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                  Maya Account
-                </p>
-
-                <p className="mt-2 text-lg font-bold text-gray-900">
-                  [CLIENT MAYA NUMBER]
-                </p>
-
-                <p className="mt-1 text-sm text-gray-600">
-                  [CLIENT ACCOUNT NAME]
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Card */}
-          {order.payment?.method === "CARD" && (
-            <div className="mt-6 rounded-xl border border-gray-200 p-5">
-              <h3 className="font-semibold text-gray-900">
-                Pay with Credit / Debit Card
-              </h3>
-
-              <p className="mt-2 text-sm leading-6 text-gray-600">
-                Complete your card payment using the store's
-                payment provider.
-              </p>
-
-              <button
-                type="button"
-                disabled
-                className="mt-4 rounded-lg bg-gray-100 px-4 py-2.5 text-sm font-medium text-gray-400"
-              >
-                Payment Provider Link
-              </button>
-
-              <p className="mt-2 text-xs text-gray-500">
-                The payment provider link will be added once the
-                store provides the required details.
-              </p>
-            </div>
-          )}
+            <p className="mt-1 text-sm leading-5 text-blue-800">
+              Please follow the payment instructions sent to your
+              registered email address. Make sure you pay the exact
+              amount shown above.
+            </p>
+          </div>
         </section>
 
         {/* =====================================================
