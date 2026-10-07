@@ -50,6 +50,8 @@ const Login = () => {
       } else {
         navigate("/products");
       }
+
+      
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to login. Please try again."
@@ -57,6 +59,22 @@ const Login = () => {
     } finally {
       setIsLoading(false);
     }
+
+    const { data: authData, error: authError } =
+  await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+
+if (authError) throw authError;
+
+console.log("ACCESS TOKEN:", authData.session?.access_token);
+
+const user = authData.user;
+
+if (!user) {
+  throw new Error("Unable to retrieve user information.");
+}
   };
 
   return (

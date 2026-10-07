@@ -5,6 +5,7 @@ import "./config/supabase"
 import productRoutes from "./routes/productRoutes";
 import orderRoutes from "./routes/orderRoutes"
 import paymentRoutes from "./routes/paymentRoutes"
+import userRoutes from "./routes/userRoutes"
 dotenv.config();
 
 const app = express();
@@ -23,6 +24,7 @@ app.get("/", (_req, res) => {
 app.use("/api/products", productRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/payments", paymentRoutes)
+app.use("/api/users", userRoutes)
 
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);

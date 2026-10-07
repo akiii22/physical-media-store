@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   Search,
   Users,
@@ -10,79 +10,9 @@ import {
   X,
 } from "lucide-react";
 
-type Customer = {
-  id: number;
-  name: string;
-  email: string;
-  phone: string;
-  orders: number;
-  totalSpent: number;
-  status: "Active" | "New";
-  joined: string;
-};
+import {getCustomers, type Customer} from "../../services/customerService"
 
-const customers: Customer[] = [
-  {
-    id: 1,
-    name: "Juan Dela Cruz",
-    email: "juan.delacruz@example.com",
-    phone: "0917 123 4567",
-    orders: 8,
-    totalSpent: 4850,
-    status: "Active",
-    joined: "September 12, 2026",
-  },
-  {
-    id: 2,
-    name: "Maria Santos",
-    email: "maria.santos@example.com",
-    phone: "0918 234 5678",
-    orders: 5,
-    totalSpent: 3290,
-    status: "Active",
-    joined: "September 18, 2026",
-  },
-  {
-    id: 3,
-    name: "Pedro Reyes",
-    email: "pedro.reyes@example.com",
-    phone: "0919 345 6789",
-    orders: 3,
-    totalSpent: 2150,
-    status: "Active",
-    joined: "September 21, 2026",
-  },
-  {
-    id: 4,
-    name: "Ana Garcia",
-    email: "ana.garcia@example.com",
-    phone: "0920 456 7890",
-    orders: 1,
-    totalSpent: 850,
-    status: "New",
-    joined: "September 28, 2026",
-  },
-  {
-    id: 5,
-    name: "Mark Villanueva",
-    email: "mark.v@example.com",
-    phone: "0921 567 8901",
-    orders: 6,
-    totalSpent: 4120,
-    status: "Active",
-    joined: "September 15, 2026",
-  },
-  {
-    id: 6,
-    name: "Sofia Mendoza",
-    email: "sofia.mendoza@example.com",
-    phone: "0922 678 9012",
-    orders: 2,
-    totalSpent: 1490,
-    status: "New",
-    joined: "September 26, 2026",
-  },
-];
+
 
 const money = (amount: number) =>
   new Intl.NumberFormat("en-PH", {
@@ -91,9 +21,36 @@ const money = (amount: number) =>
   }).format(amount);
 
 const AdminCustomers = () => {
+const [customers, setCustomers] = useState<Customer[]>([]);
   const [search, setSearch] = useState("");
   const [selectedCustomer, setSelectedCustomer] =
     useState<Customer | null>(null);
+
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const loadCustomers = async () => {
+      try {
+        setIsLoading(true);
+        setError("");
+
+        const data = await getCustomers();
+
+        setCustomers(data);
+      } catch (error) {
+        setError(
+          error instanceof Error
+            ? error.message
+            : "Failed to load customers.",
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadCustomers();
+  }, []);
 
   const filteredCustomers = useMemo(() => {
     const query = search.toLowerCase().trim();
@@ -106,20 +63,32 @@ const AdminCustomers = () => {
         customer.email.toLowerCase().includes(query) ||
         customer.phone.toLowerCase().includes(query),
     );
-  }, [search]);
+  }, [search, customers]);
 
   const totalCustomers = customers.length;
+
   const activeCustomers = customers.filter(
     (customer) => customer.status === "Active",
   ).length;
+
   const newCustomers = customers.filter(
     (customer) => customer.status === "New",
   ).length;
+
   const totalOrders = customers.reduce(
     (total, customer) => total + customer.orders,
     0,
   );
 
+  const formatJoinedDate = (date: string | null) => {
+    if (!date) return "—";
+
+    return new Date(date).toLocaleDateString("en-PH", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+  };
   return (
     <div className="min-h-full p-4 sm:p-6 lg:p-8">
       <div className="mx-auto max-w-7xl">
@@ -214,6 +183,31 @@ const AdminCustomers = () => {
 
         {/* Customer table */}
         <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+
+          {isLoading && (
+  <div className="px-6 py-16 text-center">
+    <p className="text-sm text-gray-500">
+      Loading customers...
+    </p>
+  </div>
+)}
+
+{!isLoading && error && (
+  <div className="px-6 py-16 text-center">
+    <Users
+      size={32}
+      className="mx-auto text-red-300"
+    />
+
+    <h3 className="mt-4 font-semibold text-gray-900">
+      Failed to load customers
+    </h3>
+
+    <p className="mt-1 text-sm text-gray-500">
+      {error}
+    </p>
+  </div>
+)}
 
           {/* Search */}
           <div className="border-b border-gray-200 p-4 sm:p-5">
@@ -324,7 +318,7 @@ const AdminCustomers = () => {
                     </td>
 
                     <td className="px-5 py-4 text-sm text-gray-500">
-                      {customer.joined}
+                      {formatJoinedDate(customer.joined)}
                     </td>
                   </tr>
                 ))}
