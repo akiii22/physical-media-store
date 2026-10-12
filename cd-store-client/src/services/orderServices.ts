@@ -21,6 +21,7 @@ export type PaymentMethod =
   | "MAYA"
   | "CARD";
 
+
 export type OrderStatus =
   | "PENDING_PAYMENT"
   | "PAYMENT_FAILED"

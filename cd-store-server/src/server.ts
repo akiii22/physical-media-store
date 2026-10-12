@@ -5,7 +5,9 @@ import "./config/supabase"
 import productRoutes from "./routes/productRoutes";
 import orderRoutes from "./routes/orderRoutes"
 import paymentRoutes from "./routes/paymentRoutes"
-import userRoutes from "./routes/userRoutes"
+import userRoutes from "./routes/userRoutes";
+import categoryRoutes from "./routes/categoryRoutes";
+import mediaTypeRoutes from "./routes/mediaTypeRoutes";
 dotenv.config();
 
 const app = express();
@@ -22,6 +24,8 @@ app.get("/", (_req, res) => {
 });
 
 app.use("/api/products", productRoutes);
+app.use("/api/categories", categoryRoutes);
+app.use("/api/media-types", mediaTypeRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/payments", paymentRoutes)
 app.use("/api/users", userRoutes)
