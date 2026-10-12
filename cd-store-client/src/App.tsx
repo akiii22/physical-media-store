@@ -1,3 +1,4 @@
+
 import { Route, Routes, useLocation } from "react-router-dom";
 
 import Home from "./pages/Home";
@@ -21,7 +22,7 @@ import AddProduct from "./pages/admin/AddProduct";
 import EditProduct from "./pages/admin/EditProduct";
 import AdminManagement from "./pages/admin/AdminManagement";
 import AdminSettings from "./pages/admin/AdminSettings";
-import AdminCustomers from "./pages/admin/AdminCustomer"
+import AdminCustomers from "./pages/admin/AdminCustomer";
 import NotFound from "./pages/NotFound";
 import Account from "./pages/Account";
 
@@ -38,29 +39,24 @@ const App = () => {
       {!hideNavbar && <Navbar />}
 
       <Routes>
-
         {/* ================================================
             CUSTOMER / PUBLIC ROUTES
         ================================================= */}
 
-        <Route
-          path="/"
-          element={<Home />}
-        />
+        <Route path="/" element={<Home />} />
 
-        <Route
-          path="/products"
-          element={<Products />}
-        />
+        <Route path="/products" element={<Products />} />
 
         <Route
           path="/products/:id"
           element={<ProductDetails />}
         />
 
+        <Route path="/cart" element={<Cart />} />
+
         <Route
-          path="/cart"
-          element={<Cart />}
+          path="/order-confirmation/:orderId"
+          element={<OrderConfirmation />}
         />
 
         {/* ================================================
@@ -72,72 +68,46 @@ const App = () => {
             <ProtectedRoute allowedRoles={["CUSTOMER"]} />
           }
         >
-          <Route
-            path="/checkout"
-            element={<Checkout />}
-          />
+          <Route path="/checkout" element={<Checkout />} />
 
-          <Route
-            path="/my-orders"
-            element={<MyOrders />}
-          />
+          <Route path="/my-orders" element={<MyOrders />} />
 
           <Route
             path="/my-orders/:orderId"
             element={<MyOrderDetails />}
           />
 
-          <Route
-            path="/account"
-            element={<Account />}
-          />
+          <Route path="/account" element={<Account />} />
         </Route>
-
-        <Route
-          path="/order-confirmation/:orderId"
-          element={<OrderConfirmation />}
-        />
 
         {/* ================================================
             AUTHENTICATION
         ================================================= */}
 
-        <Route
-          path="/register"
-          element={<Register />}
-        />
+        <Route path="/register" element={<Register />} />
 
-        <Route
-          path="/login"
-          element={<Login />}
-        />
+        <Route path="/login" element={<Login />} />
 
         {/* ================================================
-            ADMIN ROUTES
+            ADMIN + STAFF ROUTES
+            Both roles can access dashboard, products,
+            and order management.
         ================================================= */}
 
         <Route
           element={
-            <ProtectedRoute allowedRoles={["ADMIN"]} />
+            <ProtectedRoute
+              allowedRoles={["ADMIN", "STAFF"]}
+            />
           }
         >
           <Route element={<AdminLayout />}>
-
             <Route
               path="/admin"
               element={<AdminDashboard />}
             />
 
-            <Route
-              path="/admin/orders"
-              element={<AdminOrders />}
-            />
-
-            <Route
-              path="/admin/payments"
-              element={<AdminPayments />}
-            />
-
+            {/* Product management */}
             <Route
               path="/admin/products"
               element={<AdminProducts />}
@@ -153,29 +123,50 @@ const App = () => {
               element={<EditProduct />}
             />
 
+            {/* Order management */}
             <Route
-              path="/admin/admins"
-              element={<AdminManagement />}
+              path="/admin/orders"
+              element={<AdminOrders />}
             />
 
-            <Route
-              path="/admin/settings"
-              element={<AdminSettings />}
-            />
+            {/* ============================================
+                ADMIN-ONLY ROUTES
+                STAFF cannot access these pages.
+            ============================================ */}
 
             <Route
-  path="/admin/customers"
-  element={<AdminCustomers />}
-/>
+              element={
+                <ProtectedRoute allowedRoles={["ADMIN"]} />
+              }
+            >
+              <Route
+                path="/admin/payments"
+                element={<AdminPayments />}
+              />
 
+              <Route
+                path="/admin/admins"
+                element={<AdminManagement />}
+              />
+
+              <Route
+                path="/admin/settings"
+                element={<AdminSettings />}
+              />
+
+              <Route
+                path="/admin/customers"
+                element={<AdminCustomers />}
+              />
+            </Route>
           </Route>
         </Route>
 
-        <Route
-  path="*"
-  element={<NotFound />}
-/>
+        {/* ================================================
+            NOT FOUND
+        ================================================= */}
 
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </div>
   );

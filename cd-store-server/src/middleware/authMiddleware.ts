@@ -1,5 +1,8 @@
+
 import { Request, Response, NextFunction } from "express";
 import { supabase } from "../config/supabase";
+
+export type UserRole = "ADMIN" | "STAFF" | "CUSTOMER";
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -7,13 +10,13 @@ export interface AuthenticatedRequest extends Request {
     email?: string;
   };
 
-  role?: "ADMIN" | "CUSTOMER";
+  role?: UserRole;
 }
 
 export const requireAuth = async (
   req: AuthenticatedRequest,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const authHeader = req.headers.authorization;
@@ -24,7 +27,7 @@ export const requireAuth = async (
       });
     }
 
-    const token = authHeader.replace("Bearer ", "");
+    const token = authHeader.slice("Bearer ".length);
 
     const {
       data: { user },
@@ -37,9 +40,10 @@ export const requireAuth = async (
       });
     }
 
+    // Retrieve the application user and account status.
     const { data: appUser, error: appUserError } = await supabase
       .from("users")
-      .select("id, email, role")
+      .select("id, email, role, is_active")
       .eq("id", user.id)
       .single();
 
@@ -49,12 +53,28 @@ export const requireAuth = async (
       });
     }
 
+    // Block inactive accounts.
+    if (!appUser.is_active) {
+      return res.status(403).json({
+        message:
+          "Your account has been deactivated. Please contact an administrator.",
+      });
+    }
+
+    const role = appUser.role as UserRole;
+
+    if (!["ADMIN", "STAFF", "CUSTOMER"].includes(role)) {
+      return res.status(403).json({
+        message: "Invalid user role.",
+      });
+    }
+
     req.user = {
       id: user.id,
       email: user.email,
     };
 
-    req.role = appUser.role;
+    req.role = role;
 
     next();
   } catch (error) {
@@ -66,18 +86,20 @@ export const requireAuth = async (
   }
 };
 
-export const requireAdmin = (
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-) => {
-  console.log("AUTH ROLE:", req.role);
+export const requireRole = (...allowedRoles: UserRole[]) => {
+  return (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    if (!req.role || !allowedRoles.includes(req.role)) {
+      return res.status(403).json({
+        message: "You do not have permission to access this resource.",
+      });
+    }
 
-  if (req.role !== "ADMIN") {
-    return res.status(403).json({
-      message: "Admin access required.",
-    });
-  }
-
-  next();
+    next();
+  };
 };
+
+export const requireAdmin = requireRole("ADMIN");

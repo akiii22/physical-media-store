@@ -11,6 +11,7 @@ import {
 import {
   requireAuth,
   requireAdmin,
+  requireRole,
 } from "../middleware/authMiddleware";
 
 const router = Router();
@@ -27,10 +28,11 @@ router.get("/", getProducts);
 router.get("/:id", getProductById);
 
 // Admin product management
+/* Product management: ADMIN and STAFF */
 router.post(
   "/",
   requireAuth,
-  requireAdmin,
+  requireRole("ADMIN", "STAFF"),
   upload.array("images", 5),
   createProduct
 );
@@ -38,11 +40,12 @@ router.post(
 router.patch(
   "/:id",
   requireAuth,
-  requireAdmin,
+  requireRole("ADMIN", "STAFF"),
   upload.single("image"),
   updateProduct
 );
 
+/* Deletion: ADMIN only */
 router.delete(
   "/:id",
   requireAuth,

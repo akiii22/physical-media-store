@@ -13,68 +13,77 @@ const Login = () => {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError("");
+  
+const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
+  event.preventDefault();
+  setError("");
 
-    try {
-      setIsLoading(true);
+  try {
+    setIsLoading(true);
 
-      // 1. Sign in with Supabase Auth
-      const { data: authData, error: authError } =
-        await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
+    // 1. Authenticate with Supabase
+    const { data: authData, error: authError } =
+      await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
 
-      if (authError) throw authError;
+    if (authError) throw authError;
 
-      // 2. Make sure user exists
-      const user = authData.user;
-      if (!user) {
-        throw new Error("Unable to retrieve user information.");
-      }
+    const user = authData.user;
+    const accessToken = authData.session?.access_token;
 
-      // 3. Get the user's role from the users table
-      const { data: profile, error: profileError } = await supabase
-        .from("users")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-
-      if (profileError) throw profileError;
-
-      // 4. Redirect based on role
-      if (profile.role === "ADMIN") {
-        navigate("/admin");
-      } else {
-        navigate("/products");
-      }
-
-      
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to login. Please try again."
-      );
-    } finally {
-      setIsLoading(false);
+    if (!user || !accessToken) {
+      throw new Error("Unable to retrieve your session.");
     }
 
-    const { data: authData, error: authError } =
-  await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
+    // TESTING ONLY: Copy this token into Postman.
+    // Remove this log before production.
+    console.log("ACCESS TOKEN (Postman testing):", accessToken);
+    
 
-if (authError) throw authError;
+    // 2. Get the application role
+    const { data: profile, error: profileError } = await supabase
+      .from("users")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
 
-console.log("ACCESS TOKEN:", authData.session?.access_token);
+    if (profileError || !profile) {
+      await supabase.auth.signOut();
+      throw new Error(
+        "Unable to retrieve your account role. Please contact support."
+      );
+    }
 
-const user = authData.user;
+    console.log("Logged-in user:", user.email);
+console.log("Profile:", profile);
+console.log("Profile error:", profileError);
 
-if (!user) {
-  throw new Error("Unable to retrieve user information.");
-}
+    // 3. Redirect according to role
+    switch (profile.role) {
+      case "ADMIN":
+      case "STAFF":
+        navigate("/admin", { replace: true });
+        break;
+
+      case "CUSTOMER":
+        navigate("/products", { replace: true });
+        break;
+
+      default:
+        await supabase.auth.signOut();
+        throw new Error("Your account role is not supported.");
+    }
+  } catch (err) {
+    setError(
+      err instanceof Error
+        ? err.message
+        : "Failed to login. Please try again."
+    );
+  } finally {
+    setIsLoading(false);
+  }
   };
 
   return (

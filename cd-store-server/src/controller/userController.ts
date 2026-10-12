@@ -186,3 +186,273 @@ export const getAllCustomers = async (
     });
   }
 };
+
+type TeamRole = "ADMIN" | "STAFF";
+
+export const createTeamMember = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  try {
+    // Verify that the requester is an administrator.
+    if (req.role !== "ADMIN") {
+      return res.status(403).json({
+        message: "Admin access required.",
+      });
+    }
+
+    const { name, email, password, role } = req.body as {
+      name?: string;
+      email?: string;
+      password?: string;
+      role?: TeamRole;
+    };
+
+    const normalizedName = name?.trim();
+    const normalizedEmail = email?.trim().toLowerCase();
+
+    if (
+      !normalizedName ||
+      !normalizedEmail ||
+      !password ||
+      !["ADMIN", "STAFF"].includes(role ?? "")
+    ) {
+      return res.status(400).json({
+        message: "Name, email, password, and a valid team role are required.",
+      });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({
+        message: "Password must contain at least 8 characters.",
+      });
+    }
+
+    // Create the Supabase Auth account using the server-side client.
+    const { data: authData, error: authError } =
+      await supabase.auth.admin.createUser({
+        email: normalizedEmail,
+        password,
+        email_confirm: true,
+        user_metadata: {
+          name: normalizedName,
+        },
+      });
+
+    if (authError || !authData.user) {
+      return res.status(400).json({
+        message:
+          authError?.message ?? "Unable to create authentication account.",
+      });
+    }
+
+      const authUserId = authData.user.id;
+
+    const { data: profile, error: profileError } = await supabase
+      .from("users")
+      .update({
+        email: normalizedEmail,
+        role,
+      })
+      .eq("id", authUserId)
+      .select("id, email, role")
+      .single();
+
+    if (profileError || !profile) {
+      const { error: rollbackError } =
+        await supabase.auth.admin.deleteUser(authUserId);
+
+      if (rollbackError) {
+        console.error(
+          "Failed to roll back Auth account:",
+          rollbackError,
+        );
+      }
+
+      console.error("Failed to update team profile:", profileError);
+
+      return res.status(500).json({
+        message: "Failed to create the team member profile.",
+      });
+    }
+
+    return res.status(201).json({
+      message: "Team member created successfully.",
+      data: {
+        id: profile.id,
+        name: normalizedName,
+        email: profile.email,
+        role: profile.role,
+      },
+    });
+  } catch (error) {
+    console.error("Create team member error:", error);
+
+    return res.status(500).json({
+      message: "Failed to create team member.",
+    });
+  }
+};
+
+/**
+ * ============================================================
+ * GET ALL TEAM MEMBERS
+ * ============================================================
+ */
+export const getAllTeamMembers = async (
+  req: AuthenticatedRequest,
+  res: Response
+) => {
+  try {
+    // Only administrators can view team members.
+    if (req.role !== "ADMIN") {
+      return res.status(403).json({
+        message: "Admin access required.",
+      });
+    }
+
+    const { data: users, error } = await supabase
+  .from("users")
+  .select("id, email, role, is_active")
+  .in("role", ["ADMIN", "STAFF"])
+  .order("email", { ascending: true });
+
+if (error) {
+  console.error("Failed to retrieve team members:", error);
+
+  return res.status(500).json({
+    message: "Failed to retrieve team members.",
+  });
+}
+
+const teamMembers = (users ?? []).map((user) => ({
+  id: user.id,
+  name: "Team Member",
+  email: user.email,
+  role: user.role,
+  is_active: user.is_active,
+  createdAt: null,
+}));
+
+return res.status(200).json({
+  message: "Team members retrieved successfully.",
+  data: teamMembers,
+});
+  } catch (error) {
+    console.error("Get all team members error:", error);
+
+    return res.status(500).json({
+      message: "Failed to retrieve team members.",
+    });
+  }
+};
+
+/**
+ * ============================================================
+ * UPDATE TEAM MEMBER STATUS
+ * ADMIN ONLY
+ * ============================================================
+ */
+export const updateTeamMemberStatus = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  try {
+    if (req.role !== "ADMIN") {
+      return res.status(403).json({
+        message: "Admin access required.",
+      });
+    }
+
+    const { id } = req.params;
+    const { is_active } = req.body as {
+      is_active?: boolean;
+    };
+
+    if (typeof is_active !== "boolean") {
+      return res.status(400).json({
+        message: "is_active must be true or false.",
+      });
+    }
+
+    // Prevent an administrator from deactivating their own account.
+    if (id === req.user?.id && !is_active) {
+      return res.status(400).json({
+        message: "You cannot deactivate your own account.",
+      });
+    }
+
+    // Confirm that the target is a team member.
+    const { data: targetUser, error: targetError } = await supabase
+      .from("users")
+      .select("id, role")
+      .eq("id", id)
+      .in("role", ["ADMIN", "STAFF"])
+      .maybeSingle();
+
+    if (targetError) {
+      console.error("Failed to retrieve team member:", targetError);
+
+      return res.status(500).json({
+        message: "Failed to retrieve team member.",
+      });
+    }
+
+    if (!targetUser) {
+      return res.status(404).json({
+        message: "Team member not found.",
+      });
+    }
+
+    // Prevent deactivating the last active administrator.
+    if (targetUser.role === "ADMIN" && !is_active) {
+      const { count, error: countError } = await supabase
+        .from("users")
+        .select("id", { count: "exact", head: true })
+        .eq("role", "ADMIN")
+        .eq("is_active", true);
+
+      if (countError) {
+        console.error("Failed to count administrators:", countError);
+
+        return res.status(500).json({
+          message: "Failed to verify administrator availability.",
+        });
+      }
+
+      if ((count ?? 0) <= 1) {
+        return res.status(400).json({
+          message: "The last active administrator cannot be deactivated.",
+        });
+      }
+    }
+
+    const { data: updatedUser, error: updateError } = await supabase
+      .from("users")
+      .update({ is_active })
+      .eq("id", id)
+      .select("id, email, role, is_active")
+      .single();
+
+    if (updateError || !updatedUser) {
+      console.error("Failed to update team member status:", updateError);
+
+      return res.status(500).json({
+        message: "Failed to update team member status.",
+      });
+    }
+
+    return res.status(200).json({
+      message: is_active
+        ? "Team member reactivated successfully."
+        : "Team member deactivated successfully.",
+      data: updatedUser,
+    });
+  } catch (error) {
+    console.error("Update team member status error:", error);
+
+    return res.status(500).json({
+      message: "Failed to update team member status.",
+    });
+  }
+};

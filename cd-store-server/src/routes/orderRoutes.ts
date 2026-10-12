@@ -1,32 +1,48 @@
-import { requireAuth, requireAdmin } from './../middleware/authMiddleware';
-import {Router} from "express";
-import { createOrder, getAllOrders, getMyOrders, getOrderById, updateOrderStatus, updateShipment, updateDeliveryFee} from "../controller/orderController";
+
+import { Router } from "express";
+import {
+  createOrder,
+  getAllOrders,
+  getMyOrders,
+  getOrderById,
+  updateOrderStatus,
+  updateShipment,
+  updateDeliveryFee,
+} from "../controller/orderController";
+import {
+  requireAuth,
+  requireAdmin,
+  requireRole,
+} from "../middleware/authMiddleware";
 
 const router = Router();
 
+// Customer checkout
 router.post("/", requireAuth, createOrder);
 
+// ADMIN and STAFF: view and manage store orders
 router.get(
   "/admin/all",
   requireAuth,
-  requireAdmin,
+  requireRole("ADMIN", "STAFF"),
   getAllOrders
 );
 
 router.patch(
   "/:orderId/status",
   requireAuth,
-  requireAdmin,
+  requireRole("ADMIN", "STAFF"),
   updateOrderStatus
 );
 
 router.patch(
   "/:orderId/shipment",
   requireAuth,
-  requireAdmin,
+  requireRole("ADMIN", "STAFF"),
   updateShipment
 );
 
+// ADMIN only: update delivery fees
 router.patch(
   "/admin/:orderId/delivery-fee",
   requireAuth,
@@ -34,12 +50,9 @@ router.patch(
   updateDeliveryFee
 );
 
-router.get(
-  "/my",
-  requireAuth,
-  getMyOrders
-);
+// Customers: view their own orders
+router.get("/my", requireAuth, getMyOrders);
 
-router.get("/:orderId", requireAuth, getOrderById)
+router.get("/:orderId", requireAuth, getOrderById);
 
 export default router;

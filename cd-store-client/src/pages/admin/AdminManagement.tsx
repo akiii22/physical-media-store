@@ -1,692 +1,666 @@
-import { useMemo, useState } from "react";
 import {
-  Edit,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+  type ReactNode,
+} from "react";
+import {
   Mail,
   Plus,
   Search,
   ShieldCheck,
-  Trash2,
   UserPlus,
   Users,
   X,
+  RefreshCw,
+  AlertCircle,
+  CheckCircle2,
+  LoaderCircle,
+  Power,
 } from "lucide-react";
+import { supabase } from "../../lib/supabase";
+
+type TeamRole = "ADMIN" | "STAFF";
 
 type StaffMember = {
-  id: number;
+  id: string;
   name: string;
   email: string;
-  role: "ADMIN" | "STAFF";
-  status: "ACTIVE" | "INACTIVE";
-  createdAt: string;
+  role: TeamRole;
+  is_active: boolean;
+  createdAt: string | null;
 };
 
-const initialStaff: StaffMember[] = [
-  {
-    id: 1,
-    name: "Jerome Bulosan",
-    email: "jerome@example.com",
-    role: "ADMIN",
-    status: "ACTIVE",
-    createdAt: "Sep 20, 2026",
-  },
-  {
-    id: 2,
-    name: "Store Administrator",
-    email: "admin@example.com",
-    role: "ADMIN",
-    status: "ACTIVE",
-    createdAt: "Sep 21, 2026",
-  },
-  {
-    id: 3,
-    name: "Store Assistant",
-    email: "assistant@example.com",
-    role: "STAFF",
-    status: "ACTIVE",
-    createdAt: "Sep 22, 2026",
-  },
-];
+type TeamFormData = {
+  name: string;
+  email: string;
+  password: string;
+  role: TeamRole;
+};
+
+const API_URL = import.meta.env.VITE_API_URL;
+
+const emptyForm: TeamFormData = {
+  name: "",
+  email: "",
+  password: "",
+  role: "STAFF",
+};
+
+const formatDate = (date: string | null) => {
+  if (!date) return "Not available";
+
+  return new Date(date).toLocaleDateString("en-PH", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+};
 
 const AdminManagement = () => {
-  const [staff, setStaff] =
-    useState<StaffMember[]>(initialStaff);
+  const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [changingMemberId, setChangingMemberId] = useState<string | null>(null);
+
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   const [search, setSearch] = useState("");
-  const [roleFilter, setRoleFilter] = useState("ALL");
-  const [statusFilter, setStatusFilter] =
-    useState("ALL");
+  const [roleFilter, setRoleFilter] = useState<"ALL" | TeamRole>("ALL");
 
   const [showModal, setShowModal] = useState(false);
+  const [formData, setFormData] = useState<TeamFormData>(emptyForm);
 
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    role: "ADMIN",
-    status: "ACTIVE",
-  });
+  const loadTeamMembers = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      if (!API_URL) {
+        throw new Error("VITE_API_URL is not configured.");
+      }
+
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError) throw sessionError;
+
+      if (!session?.access_token) {
+        throw new Error("Your session has expired. Please log in again.");
+      }
+
+      const response = await fetch(`${API_URL}/users/admin/team`, {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || "Failed to load team members.");
+      }
+
+      setStaff(result.data ?? []);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to load team members.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadTeamMembers();
+  }, [loadTeamMembers]);
 
   const filteredStaff = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
     return staff.filter((member) => {
       const matchesSearch =
-        member.name
-          .toLowerCase()
-          .includes(search.toLowerCase()) ||
-        member.email
-          .toLowerCase()
-          .includes(search.toLowerCase());
+        member.name.toLowerCase().includes(query) ||
+        member.email.toLowerCase().includes(query);
+      const matchesRole = roleFilter === "ALL" || member.role === roleFilter;
 
-      const matchesRole =
-        roleFilter === "ALL" ||
-        member.role === roleFilter;
-
-      const matchesStatus =
-        statusFilter === "ALL" ||
-        member.status === statusFilter;
-
-      return (
-        matchesSearch &&
-        matchesRole &&
-        matchesStatus
-      );
+      return matchesSearch && matchesRole;
     });
-  }, [
-    staff,
-    search,
-    roleFilter,
-    statusFilter,
-  ]);
+  }, [staff, search, roleFilter]);
 
-  const activeCount = staff.filter(
-    (member) => member.status === "ACTIVE"
-  ).length;
-
-  const adminCount = staff.filter(
-    (member) => member.role === "ADMIN"
-  ).length;
+  const adminCount = staff.filter((member) => member.role === "ADMIN").length;
+  const staffCount = staff.filter((member) => member.role === "STAFF").length;
 
   const handleChange = (
-    e: React.ChangeEvent<
-      HTMLInputElement | HTMLSelectElement
-    >
+    event: ChangeEvent<HTMLInputElement | HTMLSelectElement>,
   ) => {
-    const { name, value } = e.target;
-
-    setFormData((previous) => ({
-      ...previous,
-      [name]: value,
-    }));
+    const { name, value } = event.target;
+    setFormData((previous) => ({ ...previous, [name]: value }));
   };
 
-  const handleAddStaff = (
-    e: React.FormEvent<HTMLFormElement>
-  ) => {
-    e.preventDefault();
+  const closeModal = () => {
+    if (submitting) return;
+    setShowModal(false);
+    setFormData(emptyForm);
+  };
 
-    if (
-      !formData.name.trim() ||
-      !formData.email.trim()
-    ) {
+  const handleAddStaff = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError("");
+    setSuccess("");
+
+    const name = formData.name.trim();
+    const email = formData.email.trim().toLowerCase();
+
+    if (!name || !email || !formData.password) {
+      setError("Please complete all required fields.");
       return;
     }
 
-    const newStaff: StaffMember = {
-      id: Date.now(),
-      name: formData.name.trim(),
-      email: formData.email.trim(),
-      role: formData.role as "ADMIN" | "STAFF",
-      status: formData.status as
-        | "ACTIVE"
-        | "INACTIVE",
-      createdAt: new Date().toLocaleDateString(
-        "en-PH",
-        {
-          month: "short",
-          day: "numeric",
-          year: "numeric",
-        }
-      ),
-    };
+    if (formData.password.length < 8) {
+      setError("The password must contain at least 8 characters.");
+      return;
+    }
 
-    setStaff((previous) => [
-      ...previous,
-      newStaff,
-    ]);
+    try {
+      setSubmitting(true);
 
-    setFormData({
-      name: "",
-      email: "",
-      role: "ADMIN",
-      status: "ACTIVE",
-    });
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
 
-    setShowModal(false);
+      if (sessionError) throw sessionError;
+
+      if (!session?.access_token) {
+        throw new Error("Your session has expired. Please log in again.");
+      }
+
+      const response = await fetch(`${API_URL}/users/admin/team`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          name,
+          email,
+          password: formData.password,
+          role: formData.role,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || "Failed to create the team account.");
+      }
+
+      setSuccess(result.message || "Team account created successfully.");
+      setFormData(emptyForm);
+      setShowModal(false);
+      await loadTeamMembers();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "An unexpected error occurred.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleDelete = (id: number) => {
-    const confirmed = window.confirm(
-      "Are you sure you want to remove this staff member?"
-    );
+  const handleToggleStatus = async (member: StaffMember) => {
+    const nextIsActive = !member.is_active;
+    const action = nextIsActive ? "reactivate" : "deactivate";
 
+    const confirmed = window.confirm(
+      `Are you sure you want to ${action} ${member.email}?`,
+    );
     if (!confirmed) return;
 
-    setStaff((previous) =>
-      previous.filter((member) => member.id !== id)
-    );
+    setError("");
+    setSuccess("");
+    setChangingMemberId(member.id);
+
+    try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError) throw sessionError;
+
+      if (!session?.access_token) {
+        throw new Error("Your session has expired. Please log in again.");
+      }
+
+      const response = await fetch(
+        `${API_URL}/users/admin/team/${member.id}/status`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ is_active: nextIsActive }),
+        },
+      );
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || `Failed to ${action} team member.`);
+      }
+
+      setSuccess(
+        result.message ||
+          `Team member ${nextIsActive ? "reactivated" : "deactivated"} successfully.`,
+      );
+      await loadTeamMembers();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to update team member status.",
+      );
+    } finally {
+      setChangingMemberId(null);
+    }
   };
 
   return (
     <div className="min-h-screen bg-gray-100 p-4 sm:p-6 lg:p-8">
       <div className="mx-auto max-w-7xl">
-
         {/* Header */}
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm font-medium text-gray-500">
-              Admin Panel
-            </p>
-
+            <p className="text-sm font-medium text-gray-500">Admin Panel</p>
             <h1 className="mt-1 text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
-              Admin Management
+              Team Management
             </h1>
-
             <p className="mt-2 text-sm text-gray-600">
-              Manage administrators and staff accounts.
+              Manage administrator and staff accounts.
             </p>
           </div>
 
           <button
             type="button"
-            onClick={() => setShowModal(true)}
+            onClick={() => {
+              setError("");
+              setSuccess("");
+              setShowModal(true);
+            }}
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800"
           >
             <Plus size={18} />
-            Add Admin
+            Add Team Member
           </button>
         </div>
 
-        {/* Stats */}
+        {/* Feedback */}
+        {error && (
+          <div
+            role="alert"
+            className="mb-5 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+          >
+            <AlertCircle size={19} className="mt-0.5 shrink-0" />
+            <p>{error}</p>
+          </div>
+        )}
+
+        {success && (
+          <div
+            role="status"
+            className="mb-5 flex items-start gap-3 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-700"
+          >
+            <CheckCircle2 size={19} className="mt-0.5 shrink-0" />
+            <p>{success}</p>
+          </div>
+        )}
+
+        {/* Statistics */}
         <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">
-                  Total Staff
-                </p>
-
-                <p className="mt-2 text-3xl font-bold text-gray-900">
-                  {staff.length}
-                </p>
-              </div>
-
-              <div className="rounded-xl bg-gray-100 p-3">
-                <Users size={22} />
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">
-                  Administrators
-                </p>
-
-                <p className="mt-2 text-3xl font-bold text-gray-900">
-                  {adminCount}
-                </p>
-              </div>
-
-              <div className="rounded-xl bg-blue-50 p-3">
-                <ShieldCheck
-                  size={22}
-                  className="text-blue-600"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">
-                  Active Accounts
-                </p>
-
-                <p className="mt-2 text-3xl font-bold text-gray-900">
-                  {activeCount}
-                </p>
-              </div>
-
-              <div className="rounded-xl bg-green-50 p-3">
-                <UserPlus
-                  size={22}
-                  className="text-green-600"
-                />
-              </div>
-            </div>
-          </div>
+          <StatCard
+            title="Total Team Members"
+            value={staff.length}
+            icon={<Users size={22} />}
+            loading={loading}
+          />
+          <StatCard
+            title="Administrators"
+            value={adminCount}
+            icon={<ShieldCheck size={22} />}
+            loading={loading}
+          />
+          <StatCard
+            title="Staff Members"
+            value={staffCount}
+            icon={<UserPlus size={22} />}
+            loading={loading}
+          />
         </div>
 
-        {/* Filters */}
+        {/* Search and filters */}
         <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
           <div className="grid gap-3 md:grid-cols-[1fr_auto_auto]">
-
-            {/* Search */}
             <div className="relative">
               <Search
                 size={18}
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
               />
-
               <input
-                type="text"
-                placeholder="Search by name or email..."
+                type="search"
                 value={search}
-                onChange={(e) =>
-                  setSearch(e.target.value)
-                }
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search by name or email..."
                 className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
               />
             </div>
 
-            {/* Role */}
             <select
               value={roleFilter}
-              onChange={(e) =>
-                setRoleFilter(e.target.value)
+              onChange={(event) =>
+                setRoleFilter(event.target.value as "ALL" | TeamRole)
               }
+              aria-label="Filter by role"
               className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm outline-none focus:border-gray-900"
             >
-              <option value="ALL">
-                All Roles
-              </option>
-
-              <option value="ADMIN">
-                Admin
-              </option>
-
-              <option value="STAFF">
-                Staff
-              </option>
+              <option value="ALL">All Roles</option>
+              <option value="ADMIN">Admin</option>
+              <option value="STAFF">Staff</option>
             </select>
 
-            {/* Status */}
-            <select
-              value={statusFilter}
-              onChange={(e) =>
-                setStatusFilter(e.target.value)
-              }
-              className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm outline-none focus:border-gray-900"
+            <button
+              type="button"
+              onClick={() => void loadTeamMembers()}
+              disabled={loading || changingMemberId !== null}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
             >
-              <option value="ALL">
-                All Status
-              </option>
-
-              <option value="ACTIVE">
-                Active
-              </option>
-
-              <option value="INACTIVE">
-                Inactive
-              </option>
-            </select>
+              <RefreshCw
+                size={16}
+                className={loading ? "animate-spin" : ""}
+              />
+              Refresh
+            </button>
           </div>
         </div>
 
-        {/* Desktop Table */}
+        {/* Desktop table */}
         <div className="hidden overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm md:block">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="border-b border-gray-200 bg-gray-50">
                 <tr>
                   <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Staff
+                    Team Member
                   </th>
-
                   <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                     Role
                   </th>
-
                   <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                     Status
                   </th>
-
                   <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                     Added
                   </th>
-
-                  <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                     Actions
                   </th>
                 </tr>
               </thead>
 
               <tbody className="divide-y divide-gray-100">
-                {filteredStaff.map((member) => (
-                  <tr
-                    key={member.id}
-                    className="transition hover:bg-gray-50"
-                  >
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-sm font-semibold text-gray-700">
-                          {member.name
-                            .charAt(0)
-                            .toUpperCase()}
-                        </div>
-
-                        <div className="min-w-0">
-                          <p className="font-medium text-gray-900">
-                            {member.name}
-                          </p>
-
-                          <div className="mt-0.5 flex items-center gap-1 text-xs text-gray-500">
-                            <Mail size={13} />
-                            {member.email}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-
-                    <td className="px-6 py-4">
-                      <span
-                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
-                          member.role === "ADMIN"
-                            ? "bg-blue-50 text-blue-700"
-                            : "bg-gray-100 text-gray-700"
-                        }`}
-                      >
-                        {member.role}
-                      </span>
-                    </td>
-
-                    <td className="px-6 py-4">
-                      <span
-                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
-                          member.status === "ACTIVE"
-                            ? "bg-green-50 text-green-700"
-                            : "bg-red-50 text-red-700"
-                        }`}
-                      >
-                        {member.status}
-                      </span>
-                    </td>
-
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      {member.createdAt}
-                    </td>
-
-                    <td className="px-6 py-4">
-                      <div className="flex justify-end gap-2">
-                        <button
-                          type="button"
-                          className="rounded-lg p-2 text-gray-500 transition hover:bg-gray-100 hover:text-gray-900"
-                          title="Edit"
-                        >
-                          <Edit size={17} />
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleDelete(member.id)
-                          }
-                          className="rounded-lg p-2 text-gray-500 transition hover:bg-red-50 hover:text-red-600"
-                          title="Delete"
-                        >
-                          <Trash2 size={17} />
-                        </button>
-                      </div>
+                {loading ? (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-14 text-center">
+                      <LoaderCircle
+                        size={24}
+                        className="mx-auto animate-spin text-gray-400"
+                      />
+                      <p className="mt-3 text-sm text-gray-500">
+                        Loading team members...
+                      </p>
                     </td>
                   </tr>
-                ))}
-
-                {filteredStaff.length === 0 && (
+                ) : filteredStaff.length === 0 ? (
                   <tr>
                     <td
                       colSpan={5}
-                      className="px-6 py-12 text-center"
+                      className="px-6 py-14 text-center text-sm text-gray-500"
                     >
-                      <Users
-                        size={32}
-                        className="mx-auto text-gray-300"
-                      />
-
-                      <p className="mt-3 text-sm font-medium text-gray-600">
-                        No staff members found.
-                      </p>
-
-                      <p className="mt-1 text-xs text-gray-400">
-                        Try changing your search or filters.
-                      </p>
+                      {error
+                        ? "Unable to load team members. Try refreshing."
+                        : "No team members found."}
                     </td>
                   </tr>
+                ) : (
+                  filteredStaff.map((member) => (
+                    <tr
+                      key={member.id}
+                      className="transition hover:bg-gray-50"
+                    >
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <Avatar name={member.name} />
+                          <div className="min-w-0">
+                            <p className="font-medium text-gray-900">
+                              {member.name}
+                            </p>
+                            <p className="mt-1 flex items-center gap-1.5 text-xs text-gray-500">
+                              <Mail size={13} />
+                              {member.email}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="px-6 py-4">
+                        <RoleBadge role={member.role} />
+                      </td>
+
+                      <td className="px-6 py-4">
+                        <StatusBadge isActive={member.is_active} />
+                      </td>
+
+                      <td className="px-6 py-4 text-sm text-gray-500">
+                        {formatDate(member.createdAt)}
+                      </td>
+
+                      <td className="px-6 py-4">
+                        <StatusActionButton
+                          member={member}
+                          busy={changingMemberId === member.id}
+                          disabled={changingMemberId !== null}
+                          onClick={() => void handleToggleStatus(member)}
+                        />
+                      </td>
+                    </tr>
+                  ))
                 )}
               </tbody>
             </table>
           </div>
         </div>
 
-        {/* Mobile Cards */}
+        {/* Mobile cards */}
         <div className="space-y-3 md:hidden">
-          {filteredStaff.map((member) => (
-            <div
-              key={member.id}
-              className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
-            >
-              <div className="flex items-start justify-between gap-3">
-
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100 text-sm font-semibold text-gray-700">
-                    {member.name
-                      .charAt(0)
-                      .toUpperCase()}
-                  </div>
-
-                  <div className="min-w-0">
+          {loading ? (
+            <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center">
+              <LoaderCircle
+                size={24}
+                className="mx-auto animate-spin text-gray-400"
+              />
+              <p className="mt-3 text-sm text-gray-500">
+                Loading team members...
+              </p>
+            </div>
+          ) : filteredStaff.length === 0 ? (
+            <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center text-sm text-gray-500">
+              {error
+                ? "Unable to load team members. Try refreshing."
+                : "No team members found."}
+            </div>
+          ) : (
+            filteredStaff.map((member) => (
+              <div
+                key={member.id}
+                className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
+              >
+                <div className="flex items-start gap-3">
+                  <Avatar name={member.name} />
+                  <div className="min-w-0 flex-1">
                     <p className="truncate font-medium text-gray-900">
                       {member.name}
                     </p>
-
-                    <p className="mt-0.5 truncate text-xs text-gray-500">
+                    <p className="mt-1 break-all text-xs text-gray-500">
                       {member.email}
                     </p>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <RoleBadge role={member.role} />
+                      <StatusBadge isActive={member.is_active} />
+                    </div>
+                    <p className="mt-3 text-xs text-gray-400">
+                      Added: {formatDate(member.createdAt)}
+                    </p>
+                    <StatusActionButton
+                      member={member}
+                      busy={changingMemberId === member.id}
+                      disabled={changingMemberId !== null}
+                      onClick={() => void handleToggleStatus(member)}
+                      fullWidth
+                    />
                   </div>
                 </div>
-
-                <span
-                  className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
-                    member.status === "ACTIVE"
-                      ? "bg-green-50 text-green-700"
-                      : "bg-red-50 text-red-700"
-                  }`}
-                >
-                  {member.status}
-                </span>
               </div>
-
-              <div className="mt-4 flex items-center justify-between border-t border-gray-100 pt-4">
-                <div>
-                  <p className="text-xs text-gray-400">
-                    Role
-                  </p>
-
-                  <p className="mt-1 text-sm font-medium text-gray-700">
-                    {member.role}
-                  </p>
-                </div>
-
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    className="rounded-lg border border-gray-200 p-2 text-gray-500 hover:bg-gray-50"
-                  >
-                    <Edit size={16} />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      handleDelete(member.id)
-                    }
-                    className="rounded-lg border border-gray-200 p-2 text-gray-500 hover:bg-red-50 hover:text-red-600"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
-
-          {filteredStaff.length === 0 && (
-            <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center shadow-sm">
-              <Users
-                size={32}
-                className="mx-auto text-gray-300"
-              />
-
-              <p className="mt-3 text-sm font-medium text-gray-600">
-                No staff members found.
-              </p>
-            </div>
+            ))
           )}
         </div>
       </div>
 
-      {/* =====================================================
-          ADD ADMIN MODAL
-      ===================================================== */}
-
+      {/* Create team member modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white shadow-xl">
-
-            {/* Modal Header */}
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="team-modal-title"
+            className="my-8 w-full max-w-md rounded-2xl bg-white shadow-xl"
+          >
             <div className="flex items-center justify-between border-b border-gray-100 p-5">
               <div>
-                <h2 className="font-semibold text-gray-900">
-                  Add Admin
+                <h2
+                  id="team-modal-title"
+                  className="font-semibold text-gray-900"
+                >
+                  Add Team Member
                 </h2>
-
                 <p className="mt-1 text-xs text-gray-500">
-                  Add a staff member to the admin panel.
+                  Create a real administrator or staff account.
                 </p>
               </div>
-
               <button
                 type="button"
-                onClick={() => setShowModal(false)}
-                className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                onClick={closeModal}
+                disabled={submitting}
+                aria-label="Close dialog"
+                className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
               >
                 <X size={18} />
               </button>
             </div>
 
-            {/* Modal Form */}
             <form onSubmit={handleAddStaff}>
               <div className="space-y-4 p-5">
-
-                {/* Name */}
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700">
-                    Full Name
-                  </label>
-
+                <FormField label="Full Name">
                   <input
                     type="text"
                     name="name"
                     value={formData.name}
                     onChange={handleChange}
+                    autoComplete="name"
+                    required
+                    maxLength={100}
                     placeholder="Enter full name"
-                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
+                    className={inputClass}
                   />
-                </div>
+                </FormField>
 
-                {/* Email */}
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700">
-                    Email
-                  </label>
-
+                <FormField label="Email Address">
                   <input
                     type="email"
                     name="email"
                     value={formData.email}
                     onChange={handleChange}
-                    placeholder="admin@example.com"
-                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
+                    autoComplete="email"
+                    required
+                    maxLength={254}
+                    placeholder="name@example.com"
+                    className={inputClass}
                   />
-                </div>
+                </FormField>
 
-                {/* Role */}
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700">
-                    Role
-                  </label>
+                <FormField label="Temporary Password">
+                  <input
+                    type="password"
+                    name="password"
+                    value={formData.password}
+                    onChange={handleChange}
+                    autoComplete="new-password"
+                    required
+                    minLength={8}
+                    placeholder="At least 8 characters"
+                    className={inputClass}
+                  />
+                  <p className="mt-1.5 text-xs text-gray-500">
+                    Provide the initial password securely. Do not reuse your
+                    own password.
+                  </p>
+                </FormField>
 
+                <FormField label="Role">
                   <select
                     name="role"
                     value={formData.role}
                     onChange={handleChange}
-                    className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
+                    className={inputClass}
                   >
-                    <option value="ADMIN">
-                      Admin
-                    </option>
-
-                    <option value="STAFF">
-                      Staff
-                    </option>
+                    <option value="STAFF">Staff</option>
+                    <option value="ADMIN">Administrator</option>
                   </select>
-                </div>
+                </FormField>
 
-                {/* Status */}
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700">
-                    Status
-                  </label>
-
-                  <select
-                    name="status"
-                    value={formData.status}
-                    onChange={handleChange}
-                    className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
-                  >
-                    <option value="ACTIVE">
-                      Active
-                    </option>
-
-                    <option value="INACTIVE">
-                      Inactive
-                    </option>
-                  </select>
-                </div>
-
-                <div className="rounded-lg bg-yellow-50 px-3 py-2.5 text-xs leading-5 text-yellow-700">
-                  Demo mode: this form only updates the
-                  local UI. No account is created in
-                  Supabase.
+                <div className="rounded-lg bg-blue-50 px-3 py-2.5 text-xs leading-5 text-blue-700">
+                  This creates an actual Supabase Auth account and assigns its
+                  application role. Only create accounts for authorized team
+                  members.
                 </div>
               </div>
 
-              {/* Modal Actions */}
               <div className="flex justify-end gap-3 border-t border-gray-100 p-5">
-
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
-                  className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  onClick={closeModal}
+                  disabled={submitting}
+                  className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                 >
                   Cancel
                 </button>
-
                 <button
                   type="submit"
-                  className="rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-gray-800"
+                  disabled={submitting}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Add Admin
+                  {submitting && (
+                    <LoaderCircle size={16} className="animate-spin" />
+                  )}
+                  {submitting ? "Creating..." : "Create Account"}
                 </button>
-
               </div>
             </form>
           </div>
@@ -695,5 +669,123 @@ const AdminManagement = () => {
     </div>
   );
 };
+
+const inputClass =
+  "w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm outline-none transition focus:border-gray-900 focus:ring-1 focus:ring-gray-900";
+
+function FormField({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div>
+      <label className="mb-2 block text-sm font-medium text-gray-700">
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+function Avatar({ name }: { name: string }) {
+  return (
+    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100 text-sm font-semibold text-gray-700">
+      {name.charAt(0).toUpperCase()}
+    </div>
+  );
+}
+
+function RoleBadge({ role }: { role: TeamRole }) {
+  return (
+    <span
+      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
+        role === "ADMIN"
+          ? "bg-blue-50 text-blue-700"
+          : "bg-gray-100 text-gray-700"
+      }`}
+    >
+      {role}
+    </span>
+  );
+}
+
+function StatusBadge({ isActive }: { isActive: boolean }) {
+  return (
+    <span
+      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
+        isActive
+          ? "bg-green-50 text-green-700"
+          : "bg-red-50 text-red-700"
+      }`}
+    >
+      {isActive ? "Active" : "Inactive"}
+    </span>
+  );
+}
+
+function StatusActionButton({
+  member,
+  busy,
+  disabled,
+  onClick,
+  fullWidth = false,
+}: {
+  member: StaffMember;
+  busy: boolean;
+  disabled: boolean;
+  onClick: () => void;
+  fullWidth?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`${
+        fullWidth ? "mt-4 w-full" : ""
+      } inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
+        member.is_active
+          ? "border-red-200 text-red-700 hover:bg-red-50"
+          : "border-green-200 text-green-700 hover:bg-green-50"
+      }`}
+    >
+      {busy ? (
+        <LoaderCircle size={16} className="animate-spin" />
+      ) : (
+        <Power size={16} />
+      )}
+      {member.is_active ? "Deactivate" : "Reactivate"}
+    </button>
+  );
+}
+
+function StatCard({
+  title,
+  value,
+  icon,
+  loading,
+}: {
+  title: string;
+  value: number;
+  icon: ReactNode;
+  loading: boolean;
+}) {
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm text-gray-500">{title}</p>
+          <p className="mt-2 text-3xl font-bold text-gray-900">
+            {loading ? "—" : value}
+          </p>
+        </div>
+        <div className="rounded-xl bg-gray-100 p-3">{icon}</div>
+      </div>
+    </div>
+  );
+}
 
 export default AdminManagement;

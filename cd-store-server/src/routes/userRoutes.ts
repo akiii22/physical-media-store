@@ -6,7 +6,10 @@ import {
 } from "../middleware/authMiddleware";
 
 import {
+  createTeamMember,
   getAllCustomers,
+  getAllTeamMembers,
+  updateTeamMemberStatus,
 } from "../controller/userController";
 
 const router = Router();
@@ -24,4 +27,26 @@ router.get(
   getAllCustomers
 );
 
+
+
+router.post(
+  "/admin/team",
+  requireAuth,
+  requireAdmin,
+  createTeamMember,
+);
+
+router.get(
+  "/admin/team",
+  requireAuth,
+  requireAdmin,
+  getAllTeamMembers
+);
+
+router.patch(
+  "/admin/team/:id/status",
+  requireAuth,
+  requireAdmin,
+  updateTeamMemberStatus
+);
 export default router;
