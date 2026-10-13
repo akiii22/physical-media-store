@@ -25,6 +25,7 @@ import AdminSettings from "./pages/admin/AdminSettings";
 import AdminCustomers from "./pages/admin/AdminCustomer";
 import NotFound from "./pages/NotFound";
 import Account from "./pages/Account";
+import AdminSales from "./pages/admin/AdminSales";
 
 const App = () => {
   const location = useLocation();
@@ -128,6 +129,8 @@ const App = () => {
               path="/admin/orders"
               element={<AdminOrders />}
             />
+
+            <Route path="/admin/sales-reports" element={<AdminSales />} />
 
             {/* ============================================
                 ADMIN-ONLY ROUTES

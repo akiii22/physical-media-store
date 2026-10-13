@@ -1,1 +1,64 @@
 @import "tailwindcss";
+
+@media print {
+          @page {
+            size: landscape;
+            margin: 12mm;
+          }
+
+          body {
+            background: white !important;
+            color: black !important;
+          }
+
+          body * {
+            visibility: hidden;
+          }
+
+          #sales-report-print,
+          #sales-report-print * {
+            visibility: visible;
+          }
+
+          #sales-report-print {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+          }
+
+          #sales-report-print .shadow-sm {
+            box-shadow: none !important;
+          }
+
+          #sales-report-print .rounded-2xl {
+            border-radius: 0 !important;
+          }
+
+          #sales-report-print .overflow-x-auto {
+            overflow: visible !important;
+          }
+
+          #sales-report-print table {
+            width: 100% !important;
+            min-width: 0 !important;
+            font-size: 10px !important;
+          }
+
+          #sales-report-print th,
+          #sales-report-print td {
+            padding: 6px !important;
+          }
+
+          #sales-report-print tr {
+            break-inside: avoid;
+          }
+
+          #sales-report-print .grid {
+            display: grid !important;
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+          }
+
+          #sales-report-print .hidden.print\\:block {
+            display: block !important;
+          }
+    }

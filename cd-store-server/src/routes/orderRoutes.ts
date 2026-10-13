@@ -8,6 +8,7 @@ import {
   updateOrderStatus,
   updateShipment,
   updateDeliveryFee,
+  getSalesReport,
 } from "../controller/orderController";
 import {
   requireAuth,
@@ -49,6 +50,8 @@ router.patch(
   requireAdmin,
   updateDeliveryFee
 );
+
+router.get("/admin/sales-reports", requireAuth, requireRole("ADMIN", "STAFF"), getSalesReport); 
 
 // Customers: view their own orders
 router.get("/my", requireAuth, getMyOrders);

@@ -973,3 +973,188 @@ export const getMyOrders = async (
     });
   }
 };
+
+
+// ============================================================
+// SALES REPORT
+// ADMIN + STAFF
+// ============================================================
+
+export const getSalesReport = async (
+  req: AuthenticatedRequest,
+  res: Response
+) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    // Validate date format
+    const isValidDate = (value: unknown): value is string => {
+      if (typeof value !== "string") return false;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+
+      const date = new Date(`${value}T00:00:00.000Z`);
+
+      return (
+        !Number.isNaN(date.getTime()) &&
+        date.toISOString().slice(0, 10) === value
+      );
+    };
+
+    if (!isValidDate(startDate) || !isValidDate(endDate)) {
+      return res.status(400).json({
+        message:
+          "Valid startDate and endDate are required (YYYY-MM-DD).",
+      });
+    }
+
+    if (startDate > endDate) {
+      return res.status(400).json({
+        message: "startDate must be on or before endDate.",
+      });
+    }
+
+    // Use an inclusive date range in Philippine time (UTC+8).
+    const start = new Date(
+      `${startDate}T00:00:00+08:00`
+    ).toISOString();
+
+    const endExclusive = new Date(
+      new Date(`${endDate}T00:00:00+08:00`).getTime() +
+        24 * 60 * 60 * 1000
+    ).toISOString();
+
+    // Only confirmed PRODUCT payments count as sales.
+    // Delivery-fee payments are intentionally excluded.
+    const { data: payments, error: paymentsError } =
+      await supabase
+        .from("payments")
+        .select(`
+          id,
+          order_id,
+          amount,
+          method,
+          paid_at,
+          orders (
+            id,
+            created_at,
+            recipient_name,
+            order_items (
+              id,
+              quantity,
+              unit_price,
+              products (
+                name
+              )
+            )
+          )
+        `)
+        .eq("status", "PAID")
+        .eq("payment_type", "PRODUCT")
+        .gte("paid_at", start)
+        .lt("paid_at", endExclusive)
+        .order("paid_at", { ascending: false });
+
+    if (paymentsError) {
+      console.error("Sales report query failed:", paymentsError);
+
+      return res.status(500).json({
+        message: "Failed to generate sales report.",
+      });
+    }
+
+    type ReportOrderItem = {
+      id: string;
+      quantity: number;
+      unit_price: number;
+      products:
+        | { name: string }
+        | { name: string }[]
+        | null;
+    };
+
+    type ReportOrder = {
+      id: string;
+      created_at: string;
+      recipient_name: string | null;
+      order_items: ReportOrderItem[] | null;
+    };
+
+    type ReportPayment = {
+      id: string;
+      order_id: string;
+      amount: number;
+      method: string;
+      paid_at: string | null;
+      orders: ReportOrder | ReportOrder[] | null;
+    };
+
+    const reportPayments = (payments ?? []) as unknown as ReportPayment[];
+
+    let totalSales = 0;
+    let itemsSold = 0;
+
+    const orderIds = new Set<string>();
+
+    const rows = reportPayments.map((payment) => {
+      const order = Array.isArray(payment.orders)
+        ? payment.orders[0]
+        : payment.orders;
+
+      const orderItems = order?.order_items ?? [];
+
+      const itemCount = orderItems.reduce(
+        (sum, item) => sum + Number(item.quantity || 0),
+        0
+      );
+
+      const itemDetails = orderItems.map((item) => {
+        const product = Array.isArray(item.products)
+          ? item.products[0]
+          : item.products;
+
+        return {
+          productName: product?.name ?? "Product unavailable",
+          quantity: Number(item.quantity || 0),
+          unitPrice: Number(item.unit_price || 0),
+          subtotal:
+            Number(item.quantity || 0) *
+            Number(item.unit_price || 0),
+        };
+      });
+
+      totalSales += Number(payment.amount || 0);
+      itemsSold += itemCount;
+      orderIds.add(payment.order_id);
+
+      return {
+        paymentId: payment.id,
+        orderId: payment.order_id,
+        orderDate: order?.created_at ?? null,
+        paidAt: payment.paid_at,
+        customerName: order?.recipient_name ?? "Customer",
+        paymentMethod: payment.method,
+        amount: Number(payment.amount || 0),
+        itemsSold: itemCount,
+        items: itemDetails,
+      };
+    });
+
+    return res.status(200).json({
+      message: "Sales report generated successfully.",
+      data: {
+        startDate,
+        endDate,
+        totalSales,
+        orderCount: orderIds.size,
+        itemsSold,
+        rows,
+      },
+    });
+  } catch (error) {
+    console.error("Generate sales report error:", error);
+
+    return res.status(500).json({
+      message: "Failed to generate sales report.",
+    });
+  }
+};

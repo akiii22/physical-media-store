@@ -9,6 +9,7 @@ import {
   Store,
   LogOut,
   X,
+ChartNoAxesCombined, 
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
@@ -34,6 +35,12 @@ const AdminSidebar = ({
       label: "Orders",
       path: "/admin/orders",
       icon: ShoppingBag,
+    },
+
+    {
+      label: "Sales Reports",
+      path: "/admin/sales-reports",
+      icon: ChartNoAxesCombined,
     },
     {
       label: "Payments",
