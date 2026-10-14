@@ -6,15 +6,19 @@ import { supabase } from "../config/supabase";
 import type { CreateOrderInput } from "../types/order";
 
 import { AuthenticatedRequest } from "../middleware/authMiddleware";
+import { sendPaymentInstructionsEmail } from "../services/emailService";
 
 // ============================================================
 // CREATE ORDER
 // ============================================================
 
+
 export const createOrder = async (
   req: AuthenticatedRequest,
   res: Response
 ) => {
+
+  console.log("[DEBUG] UPDATED createOrder controller is running");
   try {
     const body = req.body as CreateOrderInput;
 
@@ -33,18 +37,17 @@ export const createOrder = async (
 
     const user_id = req.user?.id;
 
-
     // ----------------------------------------------------------
     // Basic validation
     // ----------------------------------------------------------
 
     if (
       !user_id ||
-      !customer_name ||
-      !phone ||
+      !customer_name?.trim() ||
+      !phone?.trim() ||
       !delivery_method ||
       !payment_method ||
-      !items ||
+      !Array.isArray(items) ||
       items.length === 0
     ) {
       return res.status(400).json({
@@ -52,80 +55,94 @@ export const createOrder = async (
       });
     }
 
-
     // ----------------------------------------------------------
-    // Delivery requires an address
+    // Validate delivery method and address
     // ----------------------------------------------------------
 
     if (
       delivery_method !== "STORE_PICKUP" &&
-      (!province ||
-        !city ||
-        !barangay ||
-        !street_address)
+      (!province?.trim() ||
+        !city?.trim() ||
+        !barangay?.trim() ||
+        !street_address?.trim())
     ) {
       return res.status(400).json({
         message: "Complete delivery address is required.",
       });
     }
 
-
     // ----------------------------------------------------------
-    // Validate quantities
+    // Validate order quantities
     // ----------------------------------------------------------
 
     for (const item of items) {
       if (
         !item.product_id ||
+        !Number.isInteger(item.quantity) ||
         item.quantity <= 0
       ) {
         return res.status(400).json({
-          message: "Invalid order item.",
+          message: "Invalid order item or quantity.",
         });
       }
     }
 
+    // ----------------------------------------------------------
+    // Retrieve the customer's registered email
+    // ----------------------------------------------------------
+
+    const {
+      data: customer,
+      error: customerError,
+    } = await supabase
+      .from("users")
+      .select("email")
+      .eq("id", user_id)
+      .single();
+
+    if (customerError || !customer?.email) {
+      console.error(
+        "Failed to retrieve customer email:",
+        customerError
+      );
+
+      return res.status(400).json({
+        message:
+          "Unable to retrieve your registered email address.",
+      });
+    }
+
+    const customerEmail = customer.email;
 
     // ----------------------------------------------------------
-    // Get products from database
+    // Get products from the database
     // ----------------------------------------------------------
 
-    const productIds = items.map(
-      (item) => item.product_id
-    );
+    const productIds = [
+      ...new Set(items.map((item) => item.product_id)),
+    ];
 
     const {
       data: products,
       error: productsError,
     } = await supabase
       .from("products")
-      .select(`
-        id,
-        name,
-        price,
-        stock
-      `)
+      .select("id, name, price, stock")
       .in("id", productIds);
 
-
     if (productsError) {
-      console.error(productsError);
+      console.error("Product retrieval error:", productsError);
 
       return res.status(500).json({
         message: "Failed to retrieve products.",
       });
     }
 
-
-    if (
-      !products ||
-      products.length !== productIds.length
-    ) {
+    if (!products || products.length !== productIds.length) {
       return res.status(400).json({
         message: "One or more products no longer exist.",
       });
     }
-
 
     // ----------------------------------------------------------
     // Calculate total using database prices
@@ -135,10 +152,8 @@ export const createOrder = async (
 
     for (const item of items) {
       const product = products.find(
-        (product) =>
-          product.id === item.product_id
+        (product) => product.id === item.product_id
       );
-
 
       if (!product) {
         return res.status(400).json({
@@ -146,6 +161,14 @@ export const createOrder = async (
         });
       }
 
+      if (
+        !Number.isFinite(Number(product.price)) ||
+        Number(product.price) < 0
+      ) {
+        return res.status(400).json({
+          message: `Invalid price for ${product.name}.`,
+        });
+      }
 
       if (product.stock < item.quantity) {
         return res.status(400).json({
@@ -153,12 +176,8 @@ export const createOrder = async (
         });
       }
 
-
-      totalAmount +=
-        Number(product.price) *
-        item.quantity;
+      totalAmount += Number(product.price) * item.quantity;
     }
-
 
     // ----------------------------------------------------------
     // Create order
@@ -171,16 +190,11 @@ export const createOrder = async (
       .from("orders")
       .insert({
         user_id,
-
         status: "PENDING_PAYMENT",
-
         total_amount: totalAmount,
-
         delivery_method,
-
-        recipient_name: customer_name,
-
-        phone,
+        recipient_name: customer_name.trim(),
+        phone: phone.trim(),
 
         province:
           delivery_method !== "STORE_PICKUP"
@@ -210,15 +224,13 @@ export const createOrder = async (
       .select()
       .single();
 
-
-    if (orderError) {
-      console.error(orderError);
+    if (orderError || !order) {
+      console.error("Order creation error:", orderError);
 
       return res.status(500).json({
         message: "Failed to create order.",
       });
     }
-
 
     // ----------------------------------------------------------
     // Create order items
@@ -226,21 +238,16 @@ export const createOrder = async (
 
     const orderItems = items.map((item) => {
       const product = products.find(
-        (product) =>
-          product.id === item.product_id
+        (product) => product.id === item.product_id
       )!;
 
       return {
         order_id: order.id,
-
         product_id: product.id,
-
         quantity: item.quantity,
-
         unit_price: product.price,
       };
     });
-
 
     const {
       error: orderItemsError,
@@ -248,15 +255,22 @@ export const createOrder = async (
       .from("order_items")
       .insert(orderItems);
 
-
     if (orderItemsError) {
-      console.error(orderItemsError);
+      console.error(
+        "Order items creation error:",
+        orderItemsError
+      );
 
+      // The order row already exists. Do not silently leave
+      // an incomplete order eligible for normal checkout.
       return res.status(500).json({
-        message: "Failed to create order items.",
+        message:
+          "The order could not be completed. Please contact support before trying again.",
+        data: {
+          order_id: order.id,
+        },
       });
     }
-
 
     // ----------------------------------------------------------
     // Create pending payment
@@ -265,46 +279,73 @@ export const createOrder = async (
     const {
       error: paymentError,
     } = await supabase
- .from("payments")
-  .insert({
-    order_id: order.id,
-    method: payment_method,
-    amount: totalAmount,
-
-    status: "PENDING",
-
-    payment_type: "PRODUCT"
+      .from("payments")
+      .insert({
+        order_id: order.id,
+        method: payment_method,
+        amount: totalAmount,
+        status: "PENDING",
+        payment_type: "PRODUCT",
       });
 
-
     if (paymentError) {
-      console.error(paymentError);
+      console.error(
+        "Payment record creation error:",
+        paymentError
+      );
 
       return res.status(500).json({
-        message: "Failed to create payment record.",
+        message:
+          "The order was created, but its payment record could not be completed. Please contact support before trying again.",
+        data: {
+          order_id: order.id,
+        },
       });
     }
 
-
     // ----------------------------------------------------------
-    // Success response
+    // Send payment instructions email
     // ----------------------------------------------------------
 
-    return res.status(201).json({
-      message: "Order created successfully.",
+ // Send payment instructions email.
+let emailSent = false;
 
-      data: {
-        order_id: order.id,
+console.log("[Order] Order and payment created:", {
+  orderId: order.id,
+  customerEmail,
+});
 
-        total_amount: totalAmount,
+try {
+  await sendPaymentInstructionsEmail({
+    to: customerEmail,
+    customerName: customer_name.trim(),
+    orderId: order.id,
+    totalAmount,
+    paymentMethod: payment_method,
+  });
 
-        status: order.status,
-      },
-    });
+  emailSent = true;
+} catch (emailError) {
+  console.error(
+    `[Order] Payment email failed for order ${order.id}:`,
+    emailError
+  );
+}
 
+// An email failure must not cause another order to be created.
+return res.status(201).json({
+  message: emailSent
+    ? "Order created successfully. Payment instructions have been emailed to you."
+    : "Order created successfully, but the payment email could not be sent. Please check your order page or contact support.",
+  data: {
+    order_id: order.id,
+    total_amount: totalAmount,
+    status: order.status,
+    email_sent: emailSent,
+  },
+});
   } catch (error) {
-
-    console.error("Server error:", error);
+    console.error("Create order server error:", error);
 
     return res.status(500).json({
       message: "Internal server error.",

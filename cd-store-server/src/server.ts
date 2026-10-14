@@ -8,6 +8,7 @@ import paymentRoutes from "./routes/paymentRoutes"
 import userRoutes from "./routes/userRoutes";
 import categoryRoutes from "./routes/categoryRoutes";
 import mediaTypeRoutes from "./routes/mediaTypeRoutes";
+import editEmailRoutes from "./routes/editEmailRoutes";
 dotenv.config();
 
 const app = express();
@@ -29,6 +30,7 @@ app.use("/api/media-types", mediaTypeRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/payments", paymentRoutes)
 app.use("/api/users", userRoutes)
+app.use("/api/admin/email-templates", editEmailRoutes);
 
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
