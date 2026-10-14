@@ -67,6 +67,7 @@ export type CreateOrderResponse = {
     order_id: string;
     total_amount: number;
     status: OrderStatus;
+    email_sent: boolean;
   };
 };
 

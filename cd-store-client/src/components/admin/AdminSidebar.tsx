@@ -9,6 +9,7 @@ import {
   Store,
   LogOut,
   X,
+  Mail,
 ChartNoAxesCombined, 
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
@@ -67,6 +68,11 @@ const AdminSidebar = ({
       path: "/admin/settings",
       icon: Settings,
     },
+    {
+  label: "Email Templates",
+  path: "/admin/email-templates",
+  icon: Mail,
+},
   ];
 
   const handleLogout = async () => {

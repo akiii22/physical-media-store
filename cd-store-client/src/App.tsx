@@ -26,6 +26,7 @@ import AdminCustomers from "./pages/admin/AdminCustomer";
 import NotFound from "./pages/NotFound";
 import Account from "./pages/Account";
 import AdminSales from "./pages/admin/AdminSales";
+import AdminEmailTemplate from "./pages/admin/AdminEmailTemplate";
 
 const App = () => {
   const location = useLocation();
@@ -146,6 +147,10 @@ const App = () => {
                 path="/admin/payments"
                 element={<AdminPayments />}
               />
+              <Route
+                path="/admin/email-templates"
+                element={<AdminEmailTemplate />}
+              />
 
               <Route
                 path="/admin/admins"
@@ -156,12 +161,14 @@ const App = () => {
                 path="/admin/settings"
                 element={<AdminSettings />}
               />
+   
 
               <Route
                 path="/admin/customers"
                 element={<AdminCustomers />}
               />
-            </Route>
+
+         </Route>
           </Route>
         </Route>
 
