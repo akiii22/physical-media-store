@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import { supabase } from "../config/supabase";
 import multer from "multer";
 import { AuthenticatedRequest } from "../middleware/authMiddleware";
+import {sendPaymentApprovedEmail, sendPaymentRejectedEmail} from "../services/emailService";
+
 interface MulterRequest extends Request {
   file?: Express.Multer.File;
 }
@@ -349,14 +351,13 @@ export const getPendingPayments = async (
 // VERIFY PAYMENT
 // ============================================================
 
+
 export const verifyPayment = async (
   req: Request,
   res: Response
 ) => {
   try {
-
     const { paymentId } = req.params;
-
 
     if (!paymentId) {
       return res.status(400).json({
@@ -364,26 +365,12 @@ export const verifyPayment = async (
       });
     }
 
-
-    // ----------------------------------------------------------
-    // Get payment
-    // ----------------------------------------------------------
-
-    const {
-      data: payment,
-      error: paymentError,
-    } = await supabase
-      .from("payments")
-      .select(`
-        id,
-        order_id,
-        amount,
-        status,
-        payment_type
-      `)
-      .eq("id", paymentId)
-      .single();
-
+    const { data: payment, error: paymentError } =
+      await supabase
+        .from("payments")
+        .select("id, order_id, amount, status, payment_type")
+        .eq("id", paymentId)
+        .single();
 
     if (paymentError || !payment) {
       return res.status(404).json({
@@ -391,99 +378,124 @@ export const verifyPayment = async (
       });
     }
 
-
-    // ----------------------------------------------------------
-    // Make sure payment is still pending
-    // ----------------------------------------------------------
-
     if (payment.status !== "PENDING") {
       return res.status(400).json({
-        message:
-          "This payment has already been processed.",
+        message: "This payment has already been processed.",
       });
     }
 
+    const now = new Date().toISOString();
 
-    // ----------------------------------------------------------
-    // Mark payment as PAID
-    // ----------------------------------------------------------
-
-    const {
-      error: updatePaymentError,
-    } = await supabase
+    const { error: updatePaymentError } = await supabase
       .from("payments")
       .update({
         status: "PAID",
-        paid_at: new Date().toISOString(),
+        paid_at: now,
       })
-      .eq("id", paymentId);
-
+      .eq("id", paymentId)
+      .eq("status", "PENDING");
 
     if (updatePaymentError) {
-      console.error(
-        "Payment update error:",
-        updatePaymentError
-      );
+      console.error("Payment update error:", updatePaymentError);
 
       return res.status(500).json({
         message: "Failed to verify payment.",
       });
     }
 
+    let orderUpdate;
 
-    // ----------------------------------------------------------
-    // Update order
-    // ----------------------------------------------------------
+    if (payment.payment_type === "DELIVERY") {
+      // Delivery fee paid: preserve the existing order status.
+      orderUpdate = await supabase
+        .from("orders")
+        .update({
+          delivery_fee_status: "PAID",
+          updated_at: now,
+        })
+        .eq("id", payment.order_id);
+    } else {
+      // Product payment approved.
+      orderUpdate = await supabase
+        .from("orders")
+        .update({
+          status: "PROCESSING",
+          updated_at: now,
+        })
+        .eq("id", payment.order_id);
+    }
 
-    const {
-      error: updateOrderError,
-    } = await supabase
-      .from("orders")
-      .update({
-        status: "PROCESSING",
-      })
-      .eq("id", payment.order_id);
-
-
-    if (updateOrderError) {
-      console.error(
-        "Order update error:",
-        updateOrderError
-      );
+    if (orderUpdate.error) {
+      console.error("Order update error:", orderUpdate.error);
 
       return res.status(500).json({
         message:
-          "Payment was verified but order status could not be updated.",
+          "Payment was verified, but the order update failed. Please check the records before retrying.",
       });
     }
 
+    // Load the customer details needed for the email.
+    const { data: order, error: orderError } = await supabase
+      .from("orders")
+      .select("id, user_id")
+      .eq("id", payment.order_id)
+      .single();
+
+    let emailSent = false;
+
+    if (orderError || !order) {
+      console.error("Could not load order for email:", orderError);
+    } else {
+      const { data: customer, error: customerError } =
+        await supabase
+          .from("users")
+          .select("email")
+          .eq("id", order.user_id)
+          .single();
+
+      if (customerError || !customer?.email) {
+        console.error(
+          "Could not load customer email:",
+          customerError
+        );
+      } else {
+        try {
+          await sendPaymentApprovedEmail({
+            to: customer.email,
+            customerName: "Customer",
+            orderId: String(payment.order_id),
+            storeName: "Physical Media Store",
+          });
+
+          emailSent = true;
+        } catch (emailError) {
+          console.error(
+            "Payment approved, but email failed:",
+            emailError
+          );
+        }
+      }
+    }
 
     return res.status(200).json({
       message: "Payment verified successfully.",
-
       data: {
         payment_id: payment.id,
-
         order_id: payment.order_id,
-
         payment_status: "PAID",
-
-        order_status: payment.payment_type,
+        payment_type: payment.payment_type,
+        email_sent: emailSent,
       },
     });
-
   } catch (error) {
-
-    console.error(
-      "Server error:",
-      error
-    );
+    console.error("Verify payment error:", error);
 
     return res.status(500).json({
       message: "Internal server error.",
     });
   }
 };
+
 
 export const createDeliveryPayment = async (
   req: AuthenticatedRequest,
@@ -763,16 +775,17 @@ const proofUrl = publicUrlData.publicUrl;
 // REJECT PAYMENT
 // ============================================================
 
+
 export const rejectPayment = async (
   req: Request,
   res: Response
 ) => {
   try {
     const { paymentId } = req.params;
-
-    // ----------------------------------------------------------
-    // Validate payment ID
-    // ----------------------------------------------------------
+    const rejectionReason =
+      typeof req.body?.rejectionReason === "string"
+        ? req.body.rejectionReason.trim()
+        : "";
 
     if (!paymentId) {
       return res.status(400).json({
@@ -780,23 +793,19 @@ export const rejectPayment = async (
       });
     }
 
-    // ----------------------------------------------------------
-    // Get payment
-    // ----------------------------------------------------------
+    if (!rejectionReason || rejectionReason.length > 1000) {
+      return res.status(400).json({
+        message:
+          "A rejection reason is required and must be at most 1000 characters.",
+      });
+    }
 
-    const {
-      data: payment,
-      error: paymentError,
-    } = await supabase
-      .from("payments")
-      .select(`
-        id,
-        order_id,
-        status,
-        payment_type
-      `)
-      .eq("id", paymentId)
-      .single();
+    const { data: payment, error: paymentError } =
+      await supabase
+        .from("payments")
+        .select("id, order_id, status, payment_type")
+        .eq("id", paymentId)
+        .single();
 
     if (paymentError || !payment) {
       return res.status(404).json({
@@ -804,28 +813,19 @@ export const rejectPayment = async (
       });
     }
 
-    // ----------------------------------------------------------
-    // Make sure payment is still pending
-    // ----------------------------------------------------------
-
     if (payment.status !== "PENDING") {
       return res.status(400).json({
         message: "This payment has already been processed.",
       });
     }
 
-    // ----------------------------------------------------------
-    // Mark payment as FAILED
-    // ----------------------------------------------------------
-
-    const {
-      error: updatePaymentError,
-    } = await supabase
+    const { error: updatePaymentError } = await supabase
       .from("payments")
       .update({
         status: "FAILED",
       })
-      .eq("id", paymentId);
+      .eq("id", paymentId)
+      .eq("status", "PENDING");
 
     if (updatePaymentError) {
       console.error(
@@ -838,81 +838,93 @@ export const rejectPayment = async (
       });
     }
 
-    // ----------------------------------------------------------
-    // Update order depending on payment type
-    // ----------------------------------------------------------
-
-    let updateOrderError;
+    let orderUpdate;
 
     if (payment.payment_type === "DELIVERY") {
-      // --------------------------------------------------------
-      // DELIVERY PAYMENT REJECTED
-      // --------------------------------------------------------
-      // Keep the order's current status.
-      // Only make the delivery fee payable again.
-      // --------------------------------------------------------
-
-      const { error } = await supabase
+      orderUpdate = await supabase
         .from("orders")
         .update({
           delivery_fee_status: "PENDING",
           updated_at: new Date().toISOString(),
         })
         .eq("id", payment.order_id);
-
-      updateOrderError = error;
     } else {
-      // --------------------------------------------------------
-      // PRODUCT PAYMENT REJECTED
-      // --------------------------------------------------------
-      // Customer needs to submit product payment again.
-      // --------------------------------------------------------
-
-      const { error } = await supabase
+      orderUpdate = await supabase
         .from("orders")
         .update({
           status: "PENDING_PAYMENT",
           updated_at: new Date().toISOString(),
         })
         .eq("id", payment.order_id);
-
-      updateOrderError = error;
     }
 
-    // ----------------------------------------------------------
-    // Check order update
-    // ----------------------------------------------------------
-
-    if (updateOrderError) {
+    if (orderUpdate.error) {
       console.error(
         "Order update error:",
-        updateOrderError
+        orderUpdate.error
       );
 
       return res.status(500).json({
         message:
-          "Payment was rejected but the order could not be updated.",
+          "Payment was rejected, but the order update failed. Please check the records before retrying.",
       });
     }
 
-    // ----------------------------------------------------------
-    // Success response
-    // ----------------------------------------------------------
+    const { data: order, error: orderError } = await supabase
+      .from("orders")
+      .select("id, user_id")
+      .eq("id", payment.order_id)
+      .single();
+
+    let emailSent = false;
+
+    if (orderError || !order) {
+      console.error("Could not load order for email:", orderError);
+    } else {
+      const { data: customer, error: customerError } =
+        await supabase
+          .from("users")
+          .select("email")
+          .eq("id", order.user_id)
+          .single();
+
+      if (customerError || !customer?.email) {
+        console.error(
+          "Could not load customer email:",
+          customerError
+        );
+      } else {
+        try {
+          await sendPaymentRejectedEmail({
+            to: customer.email,
+            customerName: "Customer",
+            orderId: String(payment.order_id),
+            rejectionReason,
+            storeName: "Physical Media Store",
+          });
+
+          emailSent = true;
+        } catch (emailError) {
+          console.error(
+            "Payment rejected, but email failed:",
+            emailError
+          );
+        }
+      }
+    }
 
     return res.status(200).json({
-      message: "Payment rejected.",
+      message: "Payment rejected successfully.",
       data: {
         payment_id: payment.id,
         order_id: payment.order_id,
         payment_status: "FAILED",
         payment_type: payment.payment_type,
+        email_sent: emailSent,
       },
     });
   } catch (error) {
-    console.error(
-      "Server error:",
-      error
-    );
+    console.error("Reject payment error:", error);
 
     return res.status(500).json({
       message: "Internal server error.",

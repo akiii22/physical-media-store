@@ -179,3 +179,119 @@ export async function sendPaymentInstructionsEmail({
 
   return data;
 }
+
+
+type PaymentDecisionEmail = {
+  to: string;
+  customerName: string;
+  orderId: string;
+  storeName?: string;
+};
+
+async function sendPaymentDecisionEmail({
+  templateKey,
+  to,
+  customerName,
+  orderId,
+  storeName = "Physical Media Store",
+  rejectionReason = "",
+}: PaymentDecisionEmail & {
+  templateKey: "payment_approved" | "payment_rejected";
+  rejectionReason?: string;
+}) {
+  const { data: template, error: templateError } =
+    await supabase
+      .from("email_templates")
+      .select("subject, body")
+      .eq("template_key", templateKey)
+      .eq("is_active", true)
+      .maybeSingle();
+
+  if (templateError) {
+    console.error(
+      `[Email] Failed to load ${templateKey}:`,
+      templateError
+    );
+    throw new Error("Unable to load the email template.");
+  }
+
+  if (!template) {
+    throw new Error(
+      `The ${templateKey} template is missing or inactive.`
+    );
+  }
+
+  const values: Record<string, string> = {
+    customerName,
+    orderId,
+    storeName,
+    rejectionReason,
+  };
+
+  const subject = replacePlaceholders(
+    template.subject,
+    values
+  );
+
+  const message = replacePlaceholders(
+    template.body,
+    values
+  );
+
+  const htmlBody = escapeHtml(message).replace(
+    /\r?\n/g,
+    "<br />"
+  );
+
+  const { data, error } = await resend.emails.send({
+    from: emailFrom,
+    to: [to],
+    subject,
+    html: `
+      <div style="
+        font-family: Arial, sans-serif;
+        line-height: 1.7;
+        color: #222;
+        max-width: 600px;
+        margin: 0 auto;
+      ">
+        ${htmlBody}
+      </div>
+    `,
+  });
+
+  if (error) {
+    console.error(
+      `[Email] Failed to send ${templateKey}:`,
+      error.message
+    );
+    throw new Error(error.message);
+  }
+
+  console.log(`[Email] ${templateKey} accepted by Resend:`, {
+    orderId,
+    emailId: data?.id,
+  });
+
+  return data;
+}
+
+export async function sendPaymentApprovedEmail(
+  details: PaymentDecisionEmail
+) {
+  return sendPaymentDecisionEmail({
+    ...details,
+    templateKey: "payment_approved",
+  });
+}
+
+export async function sendPaymentRejectedEmail(
+  details: PaymentDecisionEmail & {
+    rejectionReason: string;
+  }
+) {
+  return sendPaymentDecisionEmail({
+    ...details,
+    templateKey: "payment_rejected",
+  });
+}

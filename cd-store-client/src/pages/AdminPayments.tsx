@@ -149,45 +149,57 @@ console.log("PENDING PAYMENTS:", data);
   // REJECT PAYMENT
   
 
-  const handleReject = async (
-    paymentId: string
-  ) => {
+ const handleReject = async (
+  paymentId: string
+) => {
+  const confirmed = window.confirm(
+    "Are you sure you want to reject this payment?"
+  );
 
-    const confirmed = window.confirm(
-      "Are you sure you want to reject this payment?"
+  if (!confirmed) return;
+
+  const reason = window.prompt(
+    "Please provide a reason for rejecting this payment:"
+  );
+
+  // Cancelled by the admin
+  if (reason === null) return;
+
+  // Validate the rejection reason
+  const trimmedReason = reason.trim();
+
+  if (!trimmedReason) {
+    setError("Please provide a rejection reason.");
+    return;
+  }
+
+  if (trimmedReason.length > 1000) {
+    setError("The rejection reason must not exceed 1000 characters.");
+    return;
+  }
+
+  try {
+    setProcessingId(paymentId);
+    setError("");
+
+    await rejectPayment(paymentId, trimmedReason);
+
+    // Remove the rejected payment from the pending list
+    setPayments((currentPayments) =>
+      currentPayments.filter(
+        (payment) => payment.payment_id !== paymentId
+      )
     );
-
-    if (!confirmed) return;
-
-    try {
-
-      setProcessingId(paymentId);
-      setError("");
-
-      await rejectPayment(paymentId);
-
-      // Remove rejected payment from pending list
-      setPayments((currentPayments) =>
-        currentPayments.filter(
-          (payment) =>
-            payment.payment_id !== paymentId
-        )
-      );
-
-    } catch (error) {
-
-      setError(
-        error instanceof Error
-          ? error.message
-          : "Failed to reject payment."
-      );
-
-    } finally {
-
-      setProcessingId(null);
-
-    }
-  };
+  } catch (error) {
+    setError(
+      error instanceof Error
+        ? error.message
+        : "Failed to reject payment."
+    );
+  } finally {
+    setProcessingId(null);
+  }
+};
 
 
 

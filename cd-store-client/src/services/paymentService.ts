@@ -100,9 +100,15 @@ export const verifyPayment = async (
 
 // Reject payment
 export const rejectPayment = async (
-  paymentId: string
+  paymentId: string,
+  rejectionReason: string
 ) => {
-  const token = await getAccessToken();
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+
+  if (!token) {
+    throw new Error("You must be logged in.");
+  }
 
   const response = await fetch(
     `${API_URL}/payments/${paymentId}/reject`,
@@ -110,19 +116,19 @@ export const rejectPayment = async (
       method: "PATCH",
       headers: {
         Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
       },
+      body: JSON.stringify({ rejectionReason }),
     }
   );
 
-  const data = await response.json();
+  const result = await response.json();
 
   if (!response.ok) {
-    throw new Error(
-      data.message || "Failed to reject payment."
-    );
+    throw new Error(result.message || "Failed to reject payment.");
   }
 
-  return data;
+  return result;
 };
 
 // Create delivery payment
