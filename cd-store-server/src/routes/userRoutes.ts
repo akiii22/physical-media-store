@@ -10,6 +10,8 @@ import {
   getAllCustomers,
   getAllTeamMembers,
   updateTeamMemberStatus,
+  updateMyProfile,
+  getMyProfile
 } from "../controller/userController";
 
 const router = Router();
@@ -49,4 +51,9 @@ router.patch(
   requireAdmin,
   updateTeamMemberStatus
 );
+
+router.get("/me/profile", requireAuth, getMyProfile);
+
+router.patch("/me/profile", requireAuth, updateMyProfile);
+
 export default router;

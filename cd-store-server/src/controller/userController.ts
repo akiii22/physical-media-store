@@ -456,3 +456,159 @@ export const updateTeamMemberStatus = async (
     });
   }
 };
+
+
+/**
+ * ============================================================
+ * GET MY CUSTOMER PROFILE
+ * CUSTOMER ONLY
+ * ============================================================
+ */
+export const getMyProfile = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  try {
+    if (req.role !== "CUSTOMER") {
+      return res.status(403).json({
+        message: "Customer access required.",
+      });
+    }
+
+    if (!req.user?.id) {
+      return res.status(401).json({
+        message: "Authentication required.",
+      });
+    }
+
+    const { data: profile, error } = await supabase
+      .from("users")
+      .select("id, email, role, full_name, phone")
+      .eq("id", req.user.id)
+      .eq("role", "CUSTOMER")
+      .maybeSingle();
+
+    if (error) {
+      console.error("Failed to retrieve customer profile:", error);
+
+      return res.status(500).json({
+        message: "Failed to retrieve your profile.",
+      });
+    }
+
+    if (!profile) {
+      return res.status(404).json({
+        message: "Customer profile not found.",
+      });
+    }
+
+    return res.status(200).json({
+      message: "Profile retrieved successfully.",
+      data: profile,
+    });
+  } catch (error) {
+    console.error("Get customer profile error:", error);
+
+    return res.status(500).json({
+      message: "Failed to retrieve your profile.",
+    });
+  }
+};
+
+/**
+ * ============================================================
+ * UPDATE MY CUSTOMER PROFILE
+ * CUSTOMER ONLY
+ * ============================================================
+ */
+export const updateMyProfile = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  try {
+    if (req.role !== "CUSTOMER") {
+      return res.status(403).json({
+        message: "Customer access required.",
+      });
+    }
+
+    if (!req.user?.id) {
+      return res.status(401).json({
+        message: "Authentication required.",
+      });
+    }
+
+    const { full_name, phone } = req.body as {
+      full_name?: unknown;
+      phone?: unknown;
+    };
+
+    if (typeof full_name !== "string" || !full_name.trim()) {
+      return res.status(400).json({
+        message: "Full name is required.",
+      });
+    }
+
+    if (full_name.trim().length > 100) {
+      return res.status(400).json({
+        message: "Full name must not exceed 100 characters.",
+      });
+    }
+
+    if (
+      phone !== undefined &&
+      phone !== null &&
+      typeof phone !== "string"
+    ) {
+      return res.status(400).json({
+        message: "Phone number must be a string.",
+      });
+    }
+
+    const normalizedPhone =
+      typeof phone === "string" ? phone.trim() : "";
+
+    if (normalizedPhone.length > 30) {
+      return res.status(400).json({
+        message: "Phone number must not exceed 30 characters.",
+      });
+    }
+
+    const { data: profile, error } = await supabase
+      .from("users")
+      .update({
+        full_name: full_name.trim(),
+        phone: normalizedPhone || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", req.user.id)
+      .eq("role", "CUSTOMER")
+      .select("id, email, role, full_name, phone")
+      .maybeSingle();
+
+    if (error) {
+      console.error("Failed to update customer profile:", error);
+
+      return res.status(500).json({
+        message: "Failed to update your profile.",
+      });
+    }
+
+    if (!profile) {
+      return res.status(404).json({
+        message: "Customer profile not found.",
+      });
+    }
+
+    return res.status(200).json({
+      message: "Profile updated successfully.",
+      data: profile,
+    });
+  } catch (error) {
+    console.error("Update customer profile error:", error);
+
+    return res.status(500).json({
+      message: "Failed to update your profile.",
+    });
+  }
+};

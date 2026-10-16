@@ -44,3 +44,4 @@ export const getCustomers = async (): Promise<Customer[]> => {
 
   return data.data;
 };
+
