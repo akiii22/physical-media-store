@@ -27,6 +27,8 @@ import NotFound from "./pages/NotFound";
 import Account from "./pages/Account";
 import AdminSales from "./pages/admin/AdminSales";
 import AdminEmailTemplate from "./pages/admin/AdminEmailTemplate";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 
 const App = () => {
   const location = useLocation();
@@ -89,6 +91,9 @@ const App = () => {
         <Route path="/register" element={<Register />} />
 
         <Route path="/login" element={<Login />} />
+
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
 
         {/* ================================================
             ADMIN + STAFF ROUTES

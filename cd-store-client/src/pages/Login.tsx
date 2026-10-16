@@ -162,6 +162,12 @@ console.log("Profile error:", profileError);
               </div>
             </div>
 
+            <div className="flex justify-end">
+               <Link to="/forgot-password" className="text-sm font-semibold text-slate-700 hover:text-slate-900 hover:underline">
+                    Forgot Password?
+               </Link>
+            </div>
+
             <button
               type="submit"
               disabled={isLoading}
