@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { supabase } from "../config/supabase";
 import multer from "multer";
 import { AuthenticatedRequest } from "../middleware/authMiddleware";
-import {sendPaymentApprovedEmail, sendPaymentRejectedEmail} from "../services/emailService";
+import {sendPaymentApprovedEmail, sendPaymentRejectedEmail, sendDeliveryPaymentInstructionsEmail} from "../services/emailService";
 
 interface MulterRequest extends Request {
   file?: Express.Multer.File;
@@ -511,18 +511,21 @@ export const createDeliveryPayment = async (
       });
     }
 
-    if (!["GCASH", "MAYA", "CARD"].includes(method)) {
+    const normalizedMethod =
+      typeof method === "string" ? method.trim().toUpperCase() : "";
+
+    if (!["GCASH", "MAYA", "CARD"].includes(normalizedMethod)) {
       return res.status(400).json({
         message: "Invalid payment method.",
       });
     }
 
-    // Get the customer's order
+    // Get the customer's order.
     const { data: order, error: orderError } = await supabase
       .from("orders")
-      .select("id, user_id, delivery_fee, delivery_fee_status")
+      .select("id, user_id, recipient_name, delivery_fee, delivery_fee_status")
       .eq("id", order_id)
-      .single();
+      .maybeSingle();
 
     if (orderError || !order) {
       return res.status(404).json({
@@ -530,67 +533,124 @@ export const createDeliveryPayment = async (
       });
     }
 
-    // Make sure the order belongs to the logged-in customer
+    // Ensure the order belongs to the logged-in customer.
     if (order.user_id !== user_id) {
       return res.status(403).json({
         message: "You are not allowed to pay for this order.",
       });
     }
 
-    // Delivery fee must exist
-    if (!order.delivery_fee || Number(order.delivery_fee) <= 0) {
+    const deliveryFee = Number(order.delivery_fee);
+
+    if (!Number.isFinite(deliveryFee) || deliveryFee <= 0) {
       return res.status(400).json({
         message: "There is no delivery fee to pay.",
       });
     }
 
-    // Prevent paying the delivery fee twice
     if (order.delivery_fee_status === "PAID") {
       return res.status(400).json({
         message: "The delivery fee has already been paid.",
       });
     }
 
-    // Check whether a pending delivery payment already exists
-    const { data: existingPayment } = await supabase
+    // Retrieve the customer's registered email.
+    const { data: customer, error: customerError } = await supabase
+      .from("users")
+      .select("email")
+      .eq("id", user_id)
+      .maybeSingle();
+
+    if (customerError || !customer?.email) {
+      console.error("Failed to retrieve customer email:", customerError);
+
+      return res.status(400).json({
+        message: "Unable to retrieve your registered email address.",
+      });
+    }
+
+    // Reuse an existing pending delivery payment when available.
+    const { data: existingPayment, error: lookupError } = await supabase
       .from("payments")
-      .select("id, amount, method, status")
+      .select("id, order_id, amount, method, status, payment_type")
       .eq("order_id", order_id)
       .eq("payment_type", "DELIVERY")
       .eq("status", "PENDING")
       .maybeSingle();
 
-    if (existingPayment) {
-      return res.status(200).json({
-        message: "A delivery payment already exists.",
-        data: existingPayment,
-      });
-    }
-
-    // Create delivery payment
-    const { data: payment, error: paymentError } = await supabase
-      .from("payments")
-      .insert({
-        order_id,
-        method,
-        amount: Number(order.delivery_fee),
-        status: "PENDING",
-        payment_type: "DELIVERY",
-      })
-      .select()
-      .single();
-
-    if (paymentError) {
-      console.error("Failed to create delivery payment:", paymentError);
+    if (lookupError) {
+      console.error("Delivery payment lookup failed:", lookupError);
 
       return res.status(500).json({
-        message: "Failed to create delivery payment.",
+        message: "Failed to check the existing delivery payment.",
       });
     }
 
-    return res.status(201).json({
-      message: "Delivery payment created successfully.",
+    let payment = existingPayment;
+
+    if (payment) {
+      // Do not silently switch methods on an existing payment.
+      if (payment.method !== normalizedMethod) {
+        return res.status(409).json({
+          message:
+            "A pending delivery payment already exists with another method. Please use that method or contact the store.",
+          data: payment,
+        });
+      }
+    } else {
+      // Create a new delivery payment.
+      const { data: newPayment, error: paymentError } = await supabase
+        .from("payments")
+        .insert({
+          order_id,
+          method: normalizedMethod,
+          amount: deliveryFee,
+          status: "PENDING",
+          payment_type: "DELIVERY",
+        })
+        .select()
+        .single();
+
+      if (paymentError || !newPayment) {
+        console.error(
+          "Failed to create delivery payment:",
+          paymentError
+        );
+
+        return res.status(500).json({
+          message: "Failed to create delivery payment.",
+        });
+      }
+
+      payment = newPayment;
+    }
+
+    // Send payment instructions. Email failure does not delete the payment.
+    let emailSent = false;
+
+    try {
+      await sendDeliveryPaymentInstructionsEmail({
+        to: customer.email,
+        customerName: order.recipient_name || "Customer",
+        orderId: String(order.id),
+        deliveryFee,
+        paymentMethod: normalizedMethod,
+      });
+
+      emailSent = true;
+    } catch (emailError) {
+      console.error(
+        `Delivery payment email failed for order ${order.id}:`,
+        emailError
+      );
+    }
+
+    return res.status(200).json({
+      message: emailSent
+        ? "Delivery payment is ready. Instructions have been emailed to you."
+        : "Delivery payment is ready, but the email could not be sent. Please check your order page or contact support.",
       data: payment,
+      email_sent: emailSent,
     });
   } catch (error) {
     console.error("Create delivery payment error:", error);
@@ -600,6 +660,7 @@ export const createDeliveryPayment = async (
     });
   }
 };
+
 
 export const uploadDeliveryPaymentProof = async (
   req: AuthenticatedRequest,
