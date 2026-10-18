@@ -386,20 +386,33 @@ export const verifyPayment = async (
 
     const now = new Date().toISOString();
 
-    const { error: updatePaymentError } = await supabase
+    const {
+      data: updatedPayment,
+      error: updatePaymentError,
+    } = await supabase
       .from("payments")
       .update({
         status: "PAID",
         paid_at: now,
+        updated_at: now,
       })
       .eq("id", paymentId)
-      .eq("status", "PENDING");
+      .eq("status", "PENDING")
+      .select("id")
+      .maybeSingle();
 
     if (updatePaymentError) {
       console.error("Payment update error:", updatePaymentError);
 
       return res.status(500).json({
         message: "Failed to verify payment.",
+      });
+    }
+
+    // A concurrent cancellation may have changed the payment after the initial read.
+    if (!updatedPayment) {
+      return res.status(409).json({
+        message: "This payment was already processed or its order was cancelled. Refresh and try again.",
       });
     }
 
@@ -880,13 +893,19 @@ export const rejectPayment = async (
       });
     }
 
-    const { error: updatePaymentError } = await supabase
+    const {
+      data: rejectedPayment,
+      error: updatePaymentError,
+    } = await supabase
       .from("payments")
       .update({
         status: "FAILED",
+        updated_at: new Date().toISOString(),
       })
       .eq("id", paymentId)
-      .eq("status", "PENDING");
+      .eq("status", "PENDING")
+      .select("id")
+      .maybeSingle();
 
     if (updatePaymentError) {
       console.error(
@@ -896,6 +915,12 @@ export const rejectPayment = async (
 
       return res.status(500).json({
         message: "Failed to reject payment.",
+      });
+    }
+
+    if (!rejectedPayment) {
+      return res.status(409).json({
+        message: "This payment was already processed or its order was cancelled. Refresh and try again.",
       });
     }
 

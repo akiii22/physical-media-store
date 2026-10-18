@@ -51,8 +51,20 @@ export const createOrder = async (
     }
 
     // ----------------------------------------------------------
-    // Validate delivery method and address
+    // Validate delivery/payment methods and address
     // ----------------------------------------------------------
+
+    if (!["DELIVERY", "SAME_DAY", "STORE_PICKUP"].includes(delivery_method)) {
+      return res.status(400).json({
+        message: "Invalid delivery method.",
+      });
+    }
+
+    if (!["GCASH", "MAYA", "CARD"].includes(payment_method)) {
+      return res.status(400).json({
+        message: "Invalid payment method.",
+      });
+    }
 
     if (
       delivery_method !== "STORE_PICKUP" &&
@@ -110,193 +122,54 @@ export const createOrder = async (
     const customerEmail = customer.email;
 
     // ----------------------------------------------------------
-    // Get products from the database
+    // Create the order, reserve stock, create order items and payment
+    // atomically in PostgreSQL. The RPC uses database prices and locks
+    // product rows so concurrent checkouts cannot oversell inventory.
     // ----------------------------------------------------------
 
-    const productIds = [
-      ...new Set(items.map((item) => item.product_id)),
-    ];
+    const { data: checkoutResult, error: checkoutError } = await supabase.rpc(
+      "create_order_with_stock_reservation",
+      {
+        p_user_id: user_id,
+        p_customer_name: customer_name.trim(),
+        p_phone: phone.trim(),
+        p_province: province?.trim() || null,
+        p_city: city?.trim() || null,
+        p_barangay: barangay?.trim() || null,
+        p_street_address: street_address?.trim() || null,
+        p_postal_code: postal_code?.trim() || null,
+        p_delivery_method: delivery_method,
+        p_payment_method: payment_method,
+        p_items: items,
+      }
+    );
 
-    const {
-      data: products,
-      error: productsError,
-    } = await supabase
-      .from("products")
-      .select("id, name, price, stock")
-      .in("id", productIds);
+    if (checkoutError || !checkoutResult) {
+      const message = checkoutError?.message ?? "Unknown checkout error";
+      console.error("Atomic checkout failed:", checkoutError);
 
-    if (productsError) {
-      console.error("Product retrieval error:", productsError);
-
-      return res.status(500).json({
-        message: "Failed to retrieve products.",
-      });
-    }
-
-    if (!products || products.length !== productIds.length) {
-      return res.status(400).json({
-        message: "One or more products no longer exist.",
-      });
-    }
-
-    // ----------------------------------------------------------
-    // Calculate total using database prices
-    // ----------------------------------------------------------
-
-    let totalAmount = 0;
-
-    for (const item of items) {
-      const product = products.find(
-        (product) => product.id === item.product_id
-      );
-
-      if (!product) {
-        return res.status(400).json({
-          message: "Product not found.",
+      if (message.includes("INSUFFICIENT_STOCK")) {
+        return res.status(409).json({
+          message: "One or more products no longer have enough stock. Please refresh your cart and try again.",
         });
       }
 
-      if (
-        !Number.isFinite(Number(product.price)) ||
-        Number(product.price) < 0
-      ) {
-        return res.status(400).json({
-          message: `Invalid price for ${product.name}.`,
-        });
+      if (message.includes("PRODUCT_NOT_FOUND")) {
+        return res.status(400).json({ message: "One or more products no longer exist." });
       }
 
-      if (product.stock < item.quantity) {
-        return res.status(400).json({
-          message: `${product.name} does not have enough stock.`,
-        });
+      if (message.includes("INVALID_ORDER_ITEM") || message.includes("ORDER_ITEMS_REQUIRED")) {
+        return res.status(400).json({ message: "Invalid order items or quantities." });
       }
 
-      totalAmount += Number(product.price) * item.quantity;
-    }
-
-    // ----------------------------------------------------------
-    // Create order
-    // ----------------------------------------------------------
-
-    const {
-      data: order,
-      error: orderError,
-    } = await supabase
-      .from("orders")
-      .insert({
-        user_id,
-        status: "PENDING_PAYMENT",
-        total_amount: totalAmount,
-        delivery_method,
-        recipient_name: customer_name.trim(),
-        phone: phone.trim(),
-
-        province:
-          delivery_method !== "STORE_PICKUP"
-            ? province
-            : null,
-
-        city:
-          delivery_method !== "STORE_PICKUP"
-            ? city
-            : null,
-
-        barangay:
-          delivery_method !== "STORE_PICKUP"
-            ? barangay
-            : null,
-
-        street_address:
-          delivery_method !== "STORE_PICKUP"
-            ? street_address
-            : null,
-
-        postal_code:
-          delivery_method !== "STORE_PICKUP"
-            ? postal_code || null
-            : null,
-      })
-      .select()
-      .single();
-
-    if (orderError || !order) {
-      console.error("Order creation error:", orderError);
-
       return res.status(500).json({
-        message: "Failed to create order.",
+        message: "Failed to complete checkout. No stock should be reserved unless the transaction succeeds.",
       });
     }
 
-    // ----------------------------------------------------------
-    // Create order items
-    // ----------------------------------------------------------
-
-    const orderItems = items.map((item) => {
-      const product = products.find(
-        (product) => product.id === item.product_id
-      )!;
-
-      return {
-        order_id: order.id,
-        product_id: product.id,
-        quantity: item.quantity,
-        unit_price: product.price,
-      };
-    });
-
-    const {
-      error: orderItemsError,
-    } = await supabase
-      .from("order_items")
-      .insert(orderItems);
-
-    if (orderItemsError) {
-      console.error(
-        "Order items creation error:",
-        orderItemsError
-      );
-
-      // The order row already exists. Do not silently leave
-      // an incomplete order eligible for normal checkout.
-      return res.status(500).json({
-        message:
-          "The order could not be completed. Please contact support before trying again.",
-        data: {
-          order_id: order.id,
-        },
-      });
-    }
-
-    // ----------------------------------------------------------
-    // Create pending payment
-    // ----------------------------------------------------------
-
-    const {
-      error: paymentError,
-    } = await supabase
-      .from("payments")
-      .insert({
-        order_id: order.id,
-        method: payment_method,
-        amount: totalAmount,
-        status: "PENDING",
-        payment_type: "PRODUCT",
-      });
-
-    if (paymentError) {
-      console.error(
-        "Payment record creation error:",
-        paymentError
-      );
-
-      return res.status(500).json({
-        message:
-          "The order was created, but its payment record could not be completed. Please contact support before trying again.",
-        data: {
-          order_id: order.id,
-        },
-      });
-    }
+    const orderId = String(checkoutResult.order_id);
+    const totalAmount = Number(checkoutResult.total_amount);
+    const orderStatus = String(checkoutResult.status);
 
     // ----------------------------------------------------------
     // Send payment instructions email
@@ -306,7 +179,7 @@ export const createOrder = async (
 let emailSent = false;
 
 console.log("[Order] Order and payment created:", {
-  orderId: order.id,
+  orderId,
   customerEmail,
 });
 
@@ -314,7 +187,7 @@ try {
   await sendPaymentInstructionsEmail({
     to: customerEmail,
     customerName: customer_name.trim(),
-    orderId: order.id,
+    orderId,
     totalAmount,
     paymentMethod: payment_method,
   });
@@ -322,7 +195,7 @@ try {
   emailSent = true;
 } catch (emailError) {
   console.error(
-    `[Order] Payment email failed for order ${order.id}:`,
+    `[Order] Payment email failed for order ${orderId}:`,
     emailError
   );
 }
@@ -333,9 +206,9 @@ return res.status(201).json({
     ? "Order created successfully. Payment instructions have been emailed to you."
     : "Order created successfully, but the payment email could not be sent. Please check your order page or contact support.",
   data: {
-    order_id: order.id,
+    order_id: orderId,
     total_amount: totalAmount,
-    status: order.status,
+    status: orderStatus,
     email_sent: emailSent,
   },
 });
@@ -625,6 +498,42 @@ console.log("BODY:", req.body);
     if (!status || !allowedStatuses.includes(status)) {
       return res.status(400).json({
         message: "Invalid order status.",
+      });
+    }
+
+    if (status === "CANCELLED") {
+      // The route is shared with STAFF for normal order management, but only
+      // ADMIN may cancel because cancellation releases reserved inventory.
+      if (req.role !== "ADMIN") {
+        return res.status(403).json({
+          message: "Only an administrator can cancel an order.",
+        });
+      }
+
+      const { data, error } = await supabase.rpc(
+        "cancel_order_and_restore_stock",
+        { p_order_id: orderId }
+      );
+
+      if (error || !data) {
+        console.error("FAILED TO CANCEL ORDER AND RESTORE STOCK:", error);
+        const errorMessage = error?.message ?? "";
+        const isMissing = errorMessage.includes("ORDER_NOT_FOUND");
+        const cannotCancel =
+          errorMessage.includes("CANNOT_CANCEL_ORDER_IN_CURRENT_STATUS") ||
+          errorMessage.includes("ORDER_HAS_PAID_PAYMENT");
+        return res.status(isMissing ? 404 : cannotCancel ? 409 : 500).json({
+          message: isMissing
+            ? "Order not found."
+            : cannotCancel
+              ? "This order cannot be cancelled through this action. Paid or in-progress orders require a separate cancellation/refund process."
+              : "Failed to cancel order and restore reserved stock.",
+        });
+      }
+
+      return res.status(200).json({
+        message: "Order cancelled successfully. Reserved stock was restored if applicable.",
+        data,
       });
     }
 
