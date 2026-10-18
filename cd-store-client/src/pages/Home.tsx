@@ -72,8 +72,8 @@ const Home = () => {
   useEffect(() => {
     const loadProducts = async () => {
       try {
-        const data = await getProducts();
-        setProducts(data);
+        const result = await getProducts();
+        setProducts(result.data);
       } catch (error) {
         console.error("Failed to load homepage products:", error);
       } finally {

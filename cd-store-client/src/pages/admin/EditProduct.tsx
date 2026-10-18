@@ -104,20 +104,28 @@ const EditProduct = () => {
         return;
       }
       try {
-        const [product, products] = await Promise.all([
+        const [product, productsResult] = await Promise.all([
           getProductById(id),
-          getProducts(),
+          getProducts({page:1, limit:48}),
         ]);
+
+        const products = productsResult.data
   // Get unique categories
         const uniqueCategories = Array.from(
-          new Map(
-            products
-              .filter((product) => product.categories)
-              .map((product) => [
-                product.categories!.id,
-                product.categories!,
-              ])
-          ).values()
+  new Map<
+    string,
+    { id: string; name: string }
+  >(
+    products
+      .filter((item) => item.categories)
+      .map((item) => [
+        item.categories!.id,
+        {
+          id: item.categories!.id,
+          name: item.categories!.name,
+        },
+      ]),
+  ).values(),
         );
 
         setCategories(uniqueCategories);

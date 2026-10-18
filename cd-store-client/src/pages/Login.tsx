@@ -1,7 +1,19 @@
-import {useState } from "react";
+
+import { useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useMutation } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { supabase } from "../lib/supabase";
+
+type LoginVariables = {
+  email: string;
+  password: string;
+};
+
+type LoginResult = {
+  role: "ADMIN" | "STAFF" | "CUSTOMER";
+};
 
 const Login = () => {
   const navigate = useNavigate();
@@ -10,94 +22,110 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  const [error, setError] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const loginMutation = useMutation<LoginResult, Error, LoginVariables>({
+    mutationFn: async ({ email, password }) => {
+      const { data: authData, error: authError } =
+        await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
 
-  
-const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
-  event.preventDefault();
-  setError("");
+      if (authError) throw authError;
 
-  try {
-    setIsLoading(true);
+      const user = authData.user;
 
-    // 1. Authenticate with Supabase
-    const { data: authData, error: authError } =
-      await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
+      if (!user || !authData.session) {
+        throw new Error("Unable to retrieve your session.");
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from("users")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profileError || !profile) {
+        await supabase.auth.signOut();
+
+        throw new Error(
+          "Unable to retrieve your account role. Please contact support."
+        );
+      }
+
+      const role = profile.role;
+
+      if (
+        role !== "ADMIN" &&
+        role !== "STAFF" &&
+        role !== "CUSTOMER"
+      ) {
+        await supabase.auth.signOut();
+
+        throw new Error("Your account role is not supported.");
+      }
+
+      return { role };
+    },
+
+    onSuccess: ({ role }) => {
+      toast.success("Login successful!", {
+        description: "Welcome back.",
       });
 
-    if (authError) throw authError;
+      switch (role) {
+        case "ADMIN":
+        case "STAFF":
+          navigate("/admin", { replace: true });
+          break;
 
-    const user = authData.user;
-    const accessToken = authData.session?.access_token;
+        case "CUSTOMER":
+          navigate("/products", { replace: true });
+          break;
+      }
+    },
 
-    if (!user || !accessToken) {
-      throw new Error("Unable to retrieve your session.");
-    }
+    onError: (error) => {
+      toast.error("Login failed", {
+        description:
+          error.message || "Please check your credentials and try again.",
+      });
+    },
+  });
 
-    // TESTING ONLY: Copy this token into Postman.
-    // Remove this log before production.
-    console.log("ACCESS TOKEN (Postman testing):", accessToken);
-    
+  const handleLogin = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
 
-    // 2. Get the application role
-    const { data: profile, error: profileError } = await supabase
-      .from("users")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (profileError || !profile) {
-      await supabase.auth.signOut();
-      throw new Error(
-        "Unable to retrieve your account role. Please contact support."
-      );
-    }
-
-    console.log("Logged-in user:", user.email);
-console.log("Profile:", profile);
-console.log("Profile error:", profileError);
-
-    // 3. Redirect according to role
-    switch (profile.role) {
-      case "ADMIN":
-      case "STAFF":
-        navigate("/admin", { replace: true });
-        break;
-
-      case "CUSTOMER":
-        navigate("/products", { replace: true });
-        break;
-
-      default:
-        await supabase.auth.signOut();
-        throw new Error("Your account role is not supported.");
-    }
-  } catch (err) {
-    setError(
-      err instanceof Error
-        ? err.message
-        : "Failed to login. Please try again."
-    );
-  } finally {
-    setIsLoading(false);
-  }
+    loginMutation.mutate({
+      email: email.trim(),
+      password,
+    });
   };
+
+  const isLoading = loginMutation.isPending;
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        {/* Brand Logo Placeholder */}
         <div className="mx-auto h-12 w-12 rounded-xl bg-slate-900 flex items-center justify-center text-white shadow-lg">
-          <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          <svg
+            className="h-6 w-6"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M13 10V3L4 14h7v7l9-11h-7z"
+            />
           </svg>
         </div>
+
         <h2 className="mt-4 text-3xl font-extrabold text-slate-900 tracking-tight">
           Welcome back
         </h2>
+
         <p className="mt-2 text-sm text-slate-600">
           Please sign in to access your account
         </p>
@@ -105,24 +133,21 @@ console.log("Profile error:", profileError);
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-6 shadow-xl shadow-slate-200/50 sm:rounded-2xl border border-slate-100 sm:px-10">
-          {error && (
-            <div className="mb-6 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-              <svg className="h-5 w-5 text-red-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span>{error}</span>
-            </div>
-          )}
-
           <form onSubmit={handleLogin} className="space-y-5">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-slate-700 mb-1"
+              >
                 Email address
               </label>
+
               <input
+                id="email"
                 type="email"
+                autoComplete="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(event) => setEmail(event.target.value)}
                 required
                 placeholder="you@example.com"
                 className="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-slate-900 placeholder-slate-400 transition-all duration-200 outline-none focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 sm:text-sm"
@@ -130,32 +155,64 @@ console.log("Profile error:", profileError);
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-slate-700 mb-1"
+              >
                 Password
               </label>
+
               <div className="relative">
                 <input
+                  id="password"
                   type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(event) => setPassword(event.target.value)}
                   required
                   placeholder="••••••••"
                   className="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 pr-11 text-slate-900 placeholder-slate-400 transition-all duration-200 outline-none focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 sm:text-sm"
                 />
+
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
+                  onClick={() => setShowPassword((current) => !current)}
                   className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
                   aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   {showPassword ? (
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24M1 1l22 22" />
+                    <svg
+                      className="h-5 w-5"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M13.875 18.825A10.05 10.05 0 0112 19c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24M1 1l22 22"
+                      />
                     </svg>
                   ) : (
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    <svg
+                      className="h-5 w-5"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                      />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                      />
                     </svg>
                   )}
                 </button>
@@ -163,9 +220,12 @@ console.log("Profile error:", profileError);
             </div>
 
             <div className="flex justify-end">
-               <Link to="/forgot-password" className="text-sm font-semibold text-slate-700 hover:text-slate-900 hover:underline">
-                    Forgot Password?
-               </Link>
+              <Link
+                to="/forgot-password"
+                className="text-sm font-semibold text-slate-700 hover:text-slate-900 hover:underline"
+              >
+                Forgot Password?
+              </Link>
             </div>
 
             <button
@@ -175,9 +235,24 @@ console.log("Profile error:", profileError);
             >
               {isLoading ? (
                 <>
-                  <svg className="h-4 w-4 animate-spin text-white" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  <svg
+                    className="h-4 w-4 animate-spin text-white"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
                   </svg>
                   <span>Logging in...</span>
                 </>

@@ -61,7 +61,10 @@ const AdminDashboard = () => {
         // GET PRODUCTS
         // =====================================================
 
-        const products = await getProducts();
+        const productsResult = await getProducts({
+          page: 1,
+          limit: 1,
+        });
 
         // =====================================================
         // GET AUTH SESSION
@@ -161,7 +164,7 @@ const AdminDashboard = () => {
           totalOrders: orders.length,
           pendingPayments: pendingPayments.length,
           processingOrders: processingOrders.length,
-          totalProducts: products.length,
+          totalProducts: productsResult.pagination.total,
         });
       } catch (error) {
         console.error(
