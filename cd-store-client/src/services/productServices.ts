@@ -48,31 +48,71 @@ const getAccessToken = async () => {
 // GET ALL PRODUCTS
 // ==========================================
 
-export const getProducts = async (): Promise<Product[]> => {
+
+export type ProductPagination = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+};
+
+export type PaginatedProducts = {
+  data: Product[];
+  pagination: ProductPagination;
+};
+
+export type ProductQueryParams = {
+  page?: number;
+  limit?: number;
+  search?: string;
+  mediaType?: string;
+};
+
+// ==========================================
+// GET PRODUCTS WITH PAGINATION AND FILTERS
+// ==========================================
+
+export const getProducts = async ({
+  page = 1,
+  limit = 12,
+  search = "",
+  mediaType = "",
+}: ProductQueryParams = {}): Promise<PaginatedProducts> => {
   try {
+    const params = new URLSearchParams({
+      page: String(page),
+      limit: String(limit),
+    });
+
+    if (search.trim()) {
+      params.set("search", search.trim());
+    }
+
+    if (mediaType && mediaType !== "ALL") {
+      params.set("mediaType", mediaType);
+    }
+
     const response = await fetch(
-      `${API_URL}/products`
+      `${API_URL}/products?${params.toString()}`
     );
 
     const result = await response.json();
 
     if (!response.ok) {
       throw new Error(
-        result.message ||
-          "Failed to fetch products."
+        result.message || "Failed to fetch products."
       );
     }
 
-    return result.data;
+    return result as PaginatedProducts;
   } catch (error) {
-    console.error(
-      "Error fetching products:",
-      error
-    );
-
+    console.error("Error fetching products:", error);
     throw error;
   }
 };
+
 
 // ==========================================
 // GET PRODUCT BY ID

@@ -2,28 +2,75 @@ import { Request, Response } from "express";
 import { supabase } from "../config/supabase";
 import { randomUUID } from "crypto";
 import multer from "multer";
-export const getProducts = async (
-  _req: Request,
-  res: Response
-) => {
+
+
+export const getProducts = async (req: Request, res: Response) => {
   try {
-    const { data, error } = await supabase
+    const page = Math.max(
+      1,
+      Number.parseInt(String(req.query.page ?? "1"), 10) || 1
+    );
+
+    const limit = Math.min(
+      48,
+      Math.max(
+        1,
+        Number.parseInt(String(req.query.limit ?? "12"), 10) || 12
+      )
+    );
+
+    const search =
+      typeof req.query.search === "string"
+        ? req.query.search.trim()
+        : "";
+
+    const mediaType =
+      typeof req.query.mediaType === "string"
+        ? req.query.mediaType.trim()
+        : "";
+
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    let query = supabase
       .from("products")
-      .select(`
-        id,
-        name,
-        description,
-        media_type,
-        condition,
-        price,
-        stock,
-        image_url,
-        categories (
+      .select(
+        `
           id,
-          name
-        )
-      `)
-      .order("created_at", { ascending: false });
+          name,
+          description,
+          media_type,
+          condition,
+          price,
+          stock,
+          image_url,
+          created_at,
+          categories (
+            id,
+            name
+          )
+        `,
+        { count: "exact" }
+      );
+
+    if (mediaType && mediaType !== "ALL") {
+      query = query.eq("media_type", mediaType);
+    }
+
+    if (search) {
+      const escapedSearch = search.replace(
+        /[%_,()\\]/g,
+        (character) => `\\${character}`
+      );
+
+      query = query.or(
+        `name.ilike.%${escapedSearch}%,description.ilike.%${escapedSearch}%`
+      );
+    }
+
+    const { data, error, count } = await query
+      .order("created_at", { ascending: false })
+      .range(from, to);
 
     if (error) {
       console.error("Supabase error:", error);
@@ -33,8 +80,19 @@ export const getProducts = async (
       });
     }
 
+    const total = count ?? 0;
+    const totalPages = Math.ceil(total / limit);
+
     return res.status(200).json({
-      data,
+      data: data ?? [],
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1,
+      },
     });
   } catch (error) {
     console.error("Server error:", error);
@@ -44,6 +102,7 @@ export const getProducts = async (
     });
   }
 };
+
 
 export const getProductById = async (
   req: Request,

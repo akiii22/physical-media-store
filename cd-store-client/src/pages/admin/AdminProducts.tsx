@@ -57,45 +57,49 @@ const AdminProducts = () => {
 
 
 
-  const loadProducts = async () => {
+  
+const loadProducts = async () => {
+  try {
+    setIsLoading(true);
+    setError("");
 
-    try {
+    const firstPage = await getProducts({
+      page: 1,
+      limit: 48,
+    });
 
-      setIsLoading(true);
+    const allProducts = [...firstPage.data];
 
-      setError("");
-
-
-
-      const data = await getProducts();
-
-
-
-      setProducts(data);
-
-    } catch (error) {
-
-      console.error(error);
-
-
-
-      setError(
-
-        error instanceof Error
-
-          ? error.message
-
-          : "Failed to load products."
-
+    if (firstPage.pagination.totalPages > 1) {
+      const remainingPages = Array.from(
+        { length: firstPage.pagination.totalPages - 1 },
+        (_, index) => index + 2
       );
 
-    } finally {
+      const results = await Promise.all(
+        remainingPages.map((page) =>
+          getProducts({ page, limit: 48 })
+        )
+      );
 
-      setIsLoading(false);
-
+      results.forEach((result) => {
+        allProducts.push(...result.data);
+      });
     }
 
-  };
+    setProducts(allProducts);
+  } catch (error) {
+    console.error(error);
+
+    setError(
+      error instanceof Error
+        ? error.message
+        : "Failed to load products."
+    );
+  } finally {
+    setIsLoading(false);
+  }
+};
 
 
 
