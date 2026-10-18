@@ -4,6 +4,7 @@ import multer from "multer";
 import {
   requireAuth,
   requireAdmin,
+  requireRole,
 } from "../middleware/authMiddleware";
 
 import {
@@ -63,30 +64,28 @@ router.post(
 // ============================================================
 
 // Get payments waiting for verification
+// Get payments waiting for verification
 router.get(
   "/pending",
   requireAuth,
-  requireAdmin,
+  requireRole("ADMIN", "STAFF"),
   getPendingPayments
 );
-
 
 // Verify payment
 router.patch(
   "/:paymentId/verify",
   requireAuth,
-  requireAdmin,
+  requireRole("ADMIN", "STAFF"),
   verifyPayment
 );
-
 
 // Reject payment
 router.patch(
   "/:paymentId/reject",
-   requireAuth,
-  requireAdmin,
+  requireAuth,
+  requireRole("ADMIN", "STAFF"),
   rejectPayment
 );
-
 
 export default router;

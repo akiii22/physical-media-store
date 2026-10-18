@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  Archive,
   ArrowRight,
   CalendarDays,
   CheckCircle2,
   CreditCard,
   MapPin,
+    RotateCcw,
   Package,
   RefreshCw,
   Search,
@@ -153,6 +155,8 @@ const AdminOrders = () => {
   const [error, setError] = useState("");
 
   const [search, setSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+const [pageSize, setPageSize] = useState(10);
   const [statusFilter, setStatusFilter] =
     useState<OrderFilter>("ALL");
   const [deliveryFilter, setDeliveryFilter] =
@@ -173,6 +177,13 @@ const AdminOrders = () => {
     }>>({});
 
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [archivingId, setArchivingId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<
+  "active" | "archived"
+>("active");
+const [archivedOrders, setArchivedOrders] = useState<Order[]>([]);
+const [archivedLoading, setArchivedLoading] = useState(false);
+const [restoringId, setRestoringId] = useState<string | null>(null);
 
   const loadOrders = async (refresh = false) => {
     try {
@@ -225,6 +236,109 @@ const AdminOrders = () => {
     loadOrders();
   }, []);
 
+
+  
+const loadArchivedOrders = async () => {
+  try {
+    setArchivedLoading(true);
+    setError("");
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      throw new Error("Your session has expired. Please sign in again.");
+    }
+
+    const response = await fetch(
+      `${API_URL}/orders/admin/archived`,
+      {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      }
+    );
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        result.message || "Failed to retrieve archived orders."
+      );
+    }
+
+    setArchivedOrders(result.data ?? []);
+    setCurrentPage(1);
+  } catch (error) {
+    setError(
+      error instanceof Error
+        ? error.message
+        : "Failed to retrieve archived orders."
+    );
+  } finally {
+    setArchivedLoading(false);
+  }
+};
+
+
+
+const handleRestoreOrder = async (order: Order) => {
+  const confirmed = window.confirm(
+    `Restore order #${order.id.slice(0, 8)}?\n\n` +
+      "This order will return to the active orders list."
+  );
+
+  if (!confirmed) return;
+
+  try {
+    setRestoringId(order.id);
+    setError("");
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      throw new Error("Your session has expired. Please sign in again.");
+    }
+
+    const response = await fetch(
+      `${API_URL}/orders/admin/${order.id}/restore`,
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      }
+    );
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.message || "Failed to restore order.");
+    }
+
+    setArchivedOrders((previous) =>
+      previous.filter((item) => item.id !== order.id)
+    );
+
+    setOrders((previous) => [
+      order,
+      ...previous,
+    ]);
+  } catch (error) {
+    setError(
+      error instanceof Error
+        ? error.message
+        : "Failed to restore order."
+    );
+  } finally {
+    setRestoringId(null);
+  }
+};
+
+
   const filteredOrders = useMemo(() => {
     const query = search.trim().toLowerCase();
 
@@ -260,6 +374,32 @@ const AdminOrders = () => {
     statusFilter,
     deliveryFilter,
   ]);
+
+  const totalPages = Math.max(
+  1,
+  Math.ceil(filteredOrders.length / pageSize)
+);
+
+const paginatedOrders = useMemo(() => {
+  const startIndex = (currentPage - 1) * pageSize;
+
+  return filteredOrders.slice(
+    startIndex,
+    startIndex + pageSize
+  );
+}, [filteredOrders, currentPage, pageSize]);
+
+const startOrder =
+  filteredOrders.length === 0
+    ? 0
+    : (currentPage - 1) * pageSize + 1;
+
+const endOrder = Math.min(
+  currentPage * pageSize,
+  filteredOrders.length
+);
+
+
 
   const stats = {
     total: orders.length,
@@ -473,6 +613,83 @@ const AdminOrders = () => {
     }
   };
 
+  const handleArchiveOrder = async (order: Order) => {
+  const eligibleStatuses: OrderStatus[] = [
+    "PENDING_PAYMENT",
+    "PAYMENT_FAILED",
+    "CANCELLED",
+  ];
+
+  if (!eligibleStatuses.includes(order.status)) {
+    setError("This order cannot be archived.");
+    return;
+  }
+
+  const hasPaidPayment = order.payments?.some(
+    (payment) => payment.status === "PAID"
+  );
+
+  if (hasPaidPayment || order.shipments?.length > 0) {
+    setError(
+      "Orders with completed payments or shipment records cannot be archived."
+    );
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Archive order #${order.id.slice(0, 8)}?\n\n` +
+      "This will hide the order from the active orders list. " +
+      "Its payment and order records will be preserved."
+  );
+
+  if (!confirmed) return;
+
+  try {
+    setArchivingId(order.id);
+    setError("");
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      throw new Error("Your session has expired. Please sign in again.");
+    }
+
+    const response = await fetch(
+      `${API_URL}/orders/admin/${order.id}/archive`,
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      }
+    );
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.message || "Failed to archive order.");
+    }
+
+    setOrders((previous) =>
+      previous.filter((item) => item.id !== order.id)
+    );
+
+    setSelectedOrder((previous) =>
+      previous?.id === order.id ? null : previous
+    );
+  } catch (error) {
+    setError(
+      error instanceof Error
+        ? error.message
+        : "Failed to archive order."
+    );
+  } finally {
+    setArchivingId(null);
+  }
+};
+
   if (loading) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 gap-3">
@@ -521,6 +738,51 @@ const AdminOrders = () => {
           </button>
         </div>
 
+        
+<div className="mb-6 flex gap-2 rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">
+  <button
+    type="button"
+    onClick={() => {
+      setActiveTab("active");
+      setCurrentPage(1);
+      setError("");
+    }}
+    className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors ${
+      activeTab === "active"
+        ? "bg-slate-900 text-white"
+        : "text-slate-600 hover:bg-slate-100"
+    }`}
+  >
+    <ShoppingBag size={16} />
+    Active Orders
+    <span className="rounded-full bg-white/15 px-2 py-0.5 text-xs">
+      {orders.length}
+    </span>
+  </button>
+
+  <button
+    type="button"
+    onClick={() => {
+      setActiveTab("archived");
+      setCurrentPage(1);
+      setError("");
+      void loadArchivedOrders();
+    }}
+    className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors ${
+      activeTab === "archived"
+        ? "bg-slate-900 text-white"
+        : "text-slate-600 hover:bg-slate-100"
+    }`}
+  >
+    <Archive size={16} />
+    Archived Orders
+    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700">
+      {archivedOrders.length}
+    </span>
+  </button>
+</div>
+
+
         {error && (
           <div className="mb-6 flex items-center justify-between rounded-xl border border-rose-200 bg-rose-50/80 p-4 text-sm font-medium text-rose-700 shadow-sm backdrop-blur-sm">
             <span>{error}</span>
@@ -536,7 +798,10 @@ const AdminOrders = () => {
 
         {/* Stats */}
 
-        <div className="mb-6 grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-5">
+{
+  activeTab === "active" ? (
+    <>
+            <div className="mb-6 grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-5">
           {[
             ["ALL", "Total Orders", stats.total],
             [
@@ -596,9 +861,10 @@ const AdminOrders = () => {
 
               <input
                 value={search}
-                onChange={(e) =>
-                  setSearch(e.target.value)
-                }
+                onChange={(event) => {
+  setSearch(event.target.value);
+  setCurrentPage(1);
+}}
                 placeholder="Search order ID, customer, email, or phone..."
                 className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50/60 pl-10 pr-4 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10"
               />
@@ -606,11 +872,10 @@ const AdminOrders = () => {
 
             <select
               value={statusFilter}
-              onChange={(e) =>
-                setStatusFilter(
-                  e.target.value as OrderFilter
-                )
-              }
+              onChange={(e) => {
+  setStatusFilter(e.target.value as OrderFilter);
+  setCurrentPage(1);
+}}
               className="h-11 rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 text-sm font-medium text-slate-700 outline-none transition-all focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 lg:w-52"
             >
               {orderStatuses.map((status) => (
@@ -622,14 +887,12 @@ const AdminOrders = () => {
                 </option>
               ))}
             </select>
-
             <select
               value={deliveryFilter}
-              onChange={(e) =>
-                setDeliveryFilter(
-                  e.target.value as DeliveryFilter
-                )
-              }
+              onChange={(e) => {
+  setDeliveryFilter(e.target.value as DeliveryFilter);
+  setCurrentPage(1);
+}}
               className="h-11 rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 text-sm font-medium text-slate-700 outline-none transition-all focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 lg:w-48"
             >
               <option value="ALL">
@@ -684,7 +947,7 @@ const AdminOrders = () => {
                 </thead>
 
                 <tbody className="divide-y divide-slate-100 text-sm">
-                  {filteredOrders.map((order) => {
+                  {paginatedOrders.map((order) => {
                     const productPayment = order.payments?.find(
                       (payment) => payment.payment_type === "PRODUCT"
                     );
@@ -859,17 +1122,42 @@ const AdminOrders = () => {
                           </div>
                         </td>
 
-                        <td className="px-5 py-4 align-top text-right">
-                          <button
-                            onClick={() =>
-                              setSelectedOrder(order)
-                            }
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200/80 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-900 hover:text-white hover:border-slate-900 active:scale-95"
-                          >
-                            View
-                            <ArrowRight size={13} />
-                          </button>
-                        </td>
+                        
+<td className="px-5 py-4 align-top text-right">
+  <div className="flex items-center justify-end gap-2">
+    <button
+      type="button"
+      onClick={() => setSelectedOrder(order)}
+      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200/80 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-900 hover:text-white hover:border-slate-900 active:scale-95"
+    >
+      View
+      <ArrowRight size={13} />
+    </button>
+
+    {(
+      [
+        "PENDING_PAYMENT",
+        "PAYMENT_FAILED",
+        "CANCELLED",
+      ] as OrderStatus[]
+    ).includes(order.status) &&
+      !order.payments?.some(
+        (payment) => payment.status === "PAID"
+      ) &&
+      !order.shipments?.length && (
+        <button
+          type="button"
+          onClick={() => handleArchiveOrder(order)}
+          disabled={archivingId === order.id || busyId === order.id}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 shadow-sm transition-colors hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Archive size={13} />
+          {archivingId === order.id ? "Archiving..." : "Archive"}
+        </button>
+      )}
+  </div>
+</td>
+
                       </tr>
                     );
                   })}
@@ -877,8 +1165,189 @@ const AdminOrders = () => {
               </table>
             </div>
           )}
+
+          {filteredOrders.length > 0 && (
+  <div className="flex flex-col gap-3 border-t border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
+      <span>
+        Showing{" "}
+        <strong className="text-slate-900">
+          {startOrder}-{endOrder}
+        </strong>{" "}
+        of{" "}
+        <strong className="text-slate-900">
+          {filteredOrders.length}
+        </strong>{" "}
+        orders
+      </span>
+
+      <select
+        value={pageSize}
+        onChange={(event) => {
+  setPageSize(Number(event.target.value));
+  setCurrentPage(1);
+}}
+        className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm"
+        aria-label="Orders per page"
+      >
+        <option value={10}>10 per page</option>
+        <option value={20}>20 per page</option>
+        <option value={50}>50 per page</option>
+      </select>
+    </div>
+
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={() =>
+          setCurrentPage((page) => Math.max(1, page - 1))
+        }
+        disabled={currentPage === 1}
+        className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        Previous
+      </button>
+
+      <span className="min-w-20 text-center text-sm text-slate-600">
+        Page {currentPage} of {totalPages}
+      </span>
+
+      <button
+        type="button"
+        onClick={() =>
+          setCurrentPage((page) =>
+            Math.min(totalPages, page + 1)
+          )
+        }
+        disabled={currentPage >= totalPages}
+        className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        Next
+      </button>
+    </div>
+  </div>
+)}
         </div>
-      </div>
+    </>
+  ): (
+    
+<div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+  <div className="flex items-center justify-between border-b border-slate-200 p-5">
+    <div>
+      <h2 className="text-lg font-bold text-slate-900">
+        Archived Orders
+      </h2>
+      <p className="mt-1 text-sm text-slate-500">
+        Historical orders preserved for reference.
+      </p>
+    </div>
+
+    <button
+      type="button"
+      onClick={() => void loadArchivedOrders()}
+      disabled={archivedLoading}
+      className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold hover:bg-slate-50 disabled:opacity-50"
+    >
+      <RefreshCw
+        size={15}
+        className={archivedLoading ? "animate-spin" : ""}
+      />
+      Refresh
+    </button>
+  </div>
+
+  {archivedLoading ? (
+    <div className="p-12 text-center text-sm text-slate-500">
+      Loading archived orders...
+    </div>
+  ) : archivedOrders.length === 0 ? (
+    <div className="p-12 text-center">
+      <Archive className="mx-auto mb-3 text-slate-400" size={30} />
+      <p className="font-semibold text-slate-800">
+        No archived orders
+      </p>
+      <p className="mt-1 text-sm text-slate-500">
+        Orders you archive will appear here.
+      </p>
+    </div>
+  ) : (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left text-sm">
+        <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+          <tr>
+            <th className="px-5 py-4">Order</th>
+            <th className="px-5 py-4">Customer</th>
+            <th className="px-5 py-4">Status</th>
+            <th className="px-5 py-4">Amount</th>
+            <th className="px-5 py-4">Order Date</th>
+            <th className="px-5 py-4 text-right">Action</th>
+          </tr>
+        </thead>
+
+        <tbody className="divide-y divide-slate-100">
+          {archivedOrders.map((order) => (
+            <tr key={order.id} className="hover:bg-slate-50/70">
+              <td className="px-5 py-4 font-semibold text-slate-900">
+                #{order.id.slice(0, 8)}
+              </td>
+
+              <td className="px-5 py-4">
+                <p className="font-medium text-slate-800">
+                  {order.recipient_name}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {order.users?.email ?? "No email available"}
+                </p>
+              </td>
+
+              <td className="px-5 py-4">
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                  {formatStatus(order.status)}
+                </span>
+              </td>
+
+              <td className="px-5 py-4 font-medium text-slate-800">
+                {Number(order.total_amount).toLocaleString("en-PH", {
+                  style: "currency",
+                  currency: "PHP",
+                })}
+              </td>
+
+              <td className="px-5 py-4 text-slate-500">
+                {new Date(order.created_at).toLocaleDateString("en-PH")}
+              </td>
+
+              <td className="px-5 py-4 text-right">
+                <div className="inline-flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedOrder(order)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    View
+                    <ArrowRight size={13} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => void handleRestoreOrder(order)}
+                    disabled={restoringId === order.id}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <RotateCcw size={13} />
+                    {restoringId === order.id ? "Restoring..." : "Restore"}
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )}
+</div>
+  )
+}
 
       {/* DRAWER */}
 
@@ -1368,6 +1837,7 @@ const AdminOrders = () => {
           </aside>
         </>
       )}
+      </div>
     </div>
   );
 };

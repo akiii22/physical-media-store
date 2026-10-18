@@ -9,6 +9,9 @@ import {
   updateShipment,
   updateDeliveryFee,
   getSalesReport,
+  archiveOrder,
+  restoreOrder,
+  getArchivedOrders,
 } from "../controller/orderController";
 import {
   requireAuth,
@@ -49,6 +52,27 @@ router.patch(
   requireAuth,
   requireAdmin,
   updateDeliveryFee
+);
+
+router.patch(
+  "/admin/:orderId/archive",
+  requireAuth,
+  requireAdmin,
+  archiveOrder
+);
+
+router.patch(
+  "/admin/:orderId/restore",
+  requireAuth,
+  requireAdmin,
+  restoreOrder
+);
+
+router.get(
+  "/admin/archived",
+  requireAuth,
+  requireAdmin,
+  getArchivedOrders
 );
 
 router.get("/admin/sales-reports", requireAuth, requireRole("ADMIN", "STAFF"), getSalesReport); 

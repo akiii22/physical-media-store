@@ -136,6 +136,11 @@ const App = () => {
               element={<AdminOrders />}
             />
 
+            <Route
+                path="/admin/payments"
+                element={<AdminPayments />}
+              />
+
             <Route path="/admin/sales-reports" element={<AdminSales />} />
 
             {/* ============================================
@@ -148,10 +153,7 @@ const App = () => {
                 <ProtectedRoute allowedRoles={["ADMIN"]} />
               }
             >
-              <Route
-                path="/admin/payments"
-                element={<AdminPayments />}
-              />
+              
               <Route
                 path="/admin/email-templates"
                 element={<AdminEmailTemplate />}

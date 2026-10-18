@@ -1,17 +1,12 @@
-
 import { Response } from "express";
-
 import { supabase } from "../config/supabase";
-
 import type { CreateOrderInput } from "../types/order";
-
 import { AuthenticatedRequest } from "../middleware/authMiddleware";
 import { sendPaymentInstructionsEmail } from "../services/emailService";
 
 // ============================================================
 // CREATE ORDER
 // ============================================================
-
 
 export const createOrder = async (
   req: AuthenticatedRequest,
@@ -532,6 +527,7 @@ export const getOrderById = async (
   }
 };
 
+
 export const getAllOrders = async (
   req: AuthenticatedRequest,
   res: Response
@@ -553,15 +549,15 @@ export const getAllOrders = async (
           unit_price
         ),
         payments (
-  id,
-  method,
-  amount,
-  status,
-  payment_type,
-  proof_url,
-  provider_reference,
-  paid_at
-),
+          id,
+          method,
+          amount,
+          status,
+          payment_type,
+          proof_url,
+          provider_reference,
+          paid_at
+        ),
         shipments (
           id,
           courier,
@@ -572,6 +568,7 @@ export const getAllOrders = async (
           delivered_at
         )
       `)
+      .is("archived_at", null)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -598,6 +595,7 @@ export const getAllOrders = async (
     });
   }
 };
+
 
 export const updateOrderStatus = async (
   req: AuthenticatedRequest,
@@ -1199,3 +1197,287 @@ export const getSalesReport = async (
     });
   }
 };
+
+
+export const archiveOrder = async (
+  req: AuthenticatedRequest,
+  res: Response
+) => {
+  try {
+    const { orderId } = req.params;
+
+    if (!orderId) {
+      return res.status(400).json({
+        message: "Order ID is required.",
+      });
+    }
+
+    // Find the order and its current status.
+    const { data: order, error: orderError } = await supabase
+      .from("orders")
+      .select("id, status, archived_at")
+      .eq("id", orderId)
+      .maybeSingle();
+
+    if (orderError) {
+      console.error("Failed to retrieve order for archiving:", orderError);
+
+      return res.status(500).json({
+        message: "Failed to retrieve order.",
+      });
+    }
+
+    if (!order) {
+      return res.status(404).json({
+        message: "Order not found.",
+      });
+    }
+
+    if (order.archived_at) {
+      return res.status(409).json({
+        message: "This order is already archived.",
+      });
+    }
+
+    // Only allow archiving orders that are not actively being fulfilled.
+    const archivableStatuses = [
+      "PENDING_PAYMENT",
+      "PAYMENT_FAILED",
+      "CANCELLED",
+    ];
+
+    if (!archivableStatuses.includes(order.status)) {
+      return res.status(409).json({
+        message:
+          "Only pending, failed-payment, or cancelled orders can be archived.",
+      });
+    }
+
+    // Never archive an order with a completed payment.
+    const { data: payments, error: paymentsError } = await supabase
+      .from("payments")
+      .select("id, status")
+      .eq("order_id", orderId);
+
+    if (paymentsError) {
+      console.error("Failed to check order payments:", paymentsError);
+
+      return res.status(500).json({
+        message: "Failed to verify order payments.",
+      });
+    }
+
+    const hasPaidPayment = (payments ?? []).some(
+      (payment) => payment.status === "PAID"
+    );
+
+    if (hasPaidPayment) {
+      return res.status(409).json({
+        message:
+          "This order has a completed payment and cannot be archived.",
+      });
+    }
+
+    // Do not archive an order that already has shipment records.
+    const { data: shipments, error: shipmentsError } = await supabase
+      .from("shipments")
+      .select("id")
+      .eq("order_id", orderId);
+
+    if (shipmentsError) {
+      console.error("Failed to check order shipments:", shipmentsError);
+
+      return res.status(500).json({
+        message: "Failed to verify order shipments.",
+      });
+    }
+
+    if (shipments && shipments.length > 0) {
+      return res.status(409).json({
+        message:
+          "This order has shipment records and cannot be archived.",
+      });
+    }
+
+    // Archive the order without deleting its related records.
+    const { data: archivedOrder, error: archiveError } = await supabase
+      .from("orders")
+      .update({
+        archived_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", orderId)
+      .is("archived_at", null)
+      .select("id, archived_at")
+      .maybeSingle();
+
+    if (archiveError) {
+      console.error("Failed to archive order:", archiveError);
+
+      return res.status(500).json({
+        message: "Failed to archive order.",
+      });
+    }
+
+    if (!archivedOrder) {
+      return res.status(409).json({
+        message: "The order was already archived or has changed.",
+      });
+    }
+
+    return res.status(200).json({
+      message: "Order archived successfully.",
+      data: archivedOrder,
+    });
+  } catch (error) {
+    console.error("Archive order error:", error);
+
+    return res.status(500).json({
+      message: "Failed to archive order.",
+    });
+  }
+};
+
+
+export const restoreOrder = async (
+  req: AuthenticatedRequest,
+  res: Response
+) => {
+  try {
+    const { orderId } = req.params;
+
+    if (!orderId) {
+      return res.status(400).json({
+        message: "Order ID is required.",
+      });
+    }
+
+    const { data: order, error: orderError } = await supabase
+      .from("orders")
+      .select("id, archived_at")
+      .eq("id", orderId)
+      .maybeSingle();
+
+    if (orderError) {
+      console.error("Failed to retrieve archived order:", orderError);
+
+      return res.status(500).json({
+        message: "Failed to retrieve order.",
+      });
+    }
+
+    if (!order) {
+      return res.status(404).json({
+        message: "Order not found.",
+      });
+    }
+
+    if (!order.archived_at) {
+      return res.status(409).json({
+        message: "This order is not archived.",
+      });
+    }
+
+    const { data: restoredOrder, error: restoreError } = await supabase
+      .from("orders")
+      .update({
+        archived_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", orderId)
+      .not("archived_at", "is", null)
+      .select("id, archived_at")
+      .maybeSingle();
+
+    if (restoreError) {
+      console.error("Failed to restore order:", restoreError);
+
+      return res.status(500).json({
+        message: "Failed to restore order.",
+      });
+    }
+
+    if (!restoredOrder) {
+      return res.status(409).json({
+        message: "The order could not be restored.",
+      });
+    }
+
+    return res.status(200).json({
+      message: "Order restored successfully.",
+      data: restoredOrder,
+    });
+  } catch (error) {
+    console.error("Restore order error:", error);
+
+    return res.status(500).json({
+      message: "Failed to restore order.",
+    });
+  }
+};
+
+
+export const getArchivedOrders = async (
+  req: AuthenticatedRequest,
+  res: Response
+) => {
+  try {
+    const { data, error } = await supabase
+      .from("orders")
+      .select(`
+        *,
+        users (
+          id,
+          email,
+          role
+        ),
+        order_items (
+          id,
+          product_id,
+          quantity,
+          unit_price
+        ),
+        payments (
+          id,
+          method,
+          amount,
+          status,
+          payment_type,
+          proof_url,
+          provider_reference,
+          paid_at
+        ),
+        shipments (
+          id,
+          courier,
+          tracking_number,
+          status,
+          tracking_url,
+          shipped_at,
+          delivered_at
+        )
+      `)
+      .not("archived_at", "is", null)
+      .order("archived_at", { ascending: false });
+
+    if (error) {
+      console.error("Failed to retrieve archived orders:", error);
+
+      return res.status(500).json({
+        message: "Failed to retrieve archived orders.",
+      });
+    }
+
+    return res.status(200).json({
+      message: "Archived orders retrieved successfully.",
+      data,
+    });
+  } catch (error) {
+    console.error("Get archived orders error:", error);
+
+    return res.status(500).json({
+      message: "Failed to retrieve archived orders.",
+    });
+  }
+};
+
