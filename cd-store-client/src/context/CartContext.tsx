@@ -1,7 +1,9 @@
+
 import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -9,121 +11,161 @@ import {
 import type { Product } from "../types/product";
 import type { CartItem } from "../types/cart";
 
+export type AddToCartResult =
+  | "added"
+  | "quantity-increased"
+  | "out-of-stock"
+  | "stock-limit-reached";
+
 type CartContextType = {
   items: CartItem[];
-  addToCart: (product: Product) => void;
+  addToCart: (product: Product) => AddToCartResult;
   removeFromCart: (productId: string) => void;
-  updateQuantity: (
-    productId: string,
-    quantity: number
-  ) => void;
+  updateQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
   getCartItemCount: () => number;
   getCartSubtotal: () => number;
 };
 
 const CartContext = createContext<CartContextType | undefined>(
-  undefined
+  undefined,
 );
 
 type CartProviderProps = {
   children: ReactNode;
 };
 
-export const CartProvider = ({
-  children,
-}: CartProviderProps) => {
-  // Load cart from localStorage when the app starts
-  const [items, setItems] = useState<CartItem[]>(() => {
-    try {
-      const savedCart = localStorage.getItem("cart");
-
-      if (!savedCart) {
-        return [];
-      }
-
-      return JSON.parse(savedCart);
-    } catch (error) {
-      console.error("Failed to load cart:", error);
+const loadCart = (): CartItem[] => {
+  try {
+    if (typeof window === "undefined") {
       return [];
     }
-  });
 
-  // Save cart to localStorage whenever items change
-  useEffect(() => {
-    localStorage.setItem("cart", JSON.stringify(items));
-  }, [items]);
+    const savedCart = localStorage.getItem("cart");
 
-  // Add product to cart
-  const addToCart = (product: Product) => {
-    // Don't add products that are out of stock
-    if (product.stock <= 0) {
-      return;
+    if (!savedCart) {
+      return [];
     }
 
-    setItems((currentItems) => {
-      const existingItem = currentItems.find(
-        (item) => item.product.id === product.id
-      );
+    const parsed: unknown = JSON.parse(savedCart);
 
-      // Product already exists in cart
-      if (existingItem) {
-        // Don't exceed available stock
-        if (existingItem.quantity >= product.stock) {
-          return currentItems;
-        }
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
 
-        return currentItems.map((item) =>
-          item.product.id === product.id
-            ? {
-                ...item,
-                quantity: item.quantity + 1,
-              }
-            : item
-        );
-      }
+    return parsed.filter(
+      (item): item is CartItem =>
+        item !== null &&
+        typeof item === "object" &&
+        "product" in item &&
+        "quantity" in item &&
+        typeof item.quantity === "number" &&
+        Number.isInteger(item.quantity) &&
+        item.quantity > 0 &&
+        item.product !== null &&
+        typeof item.product === "object" &&
+        typeof item.product.id === "string" &&
+        typeof item.product.stock === "number" &&
+        item.product.stock > 0,
+    ).map((item) => ({
+      ...item,
+      quantity: Math.min(item.quantity, item.product.stock),
+    }));
+  } catch (error) {
+    console.error("Failed to load cart:", error);
+    return [];
+  }
+};
 
-      // Product doesn't exist in cart yet
-      return [
-        ...currentItems,
-        {
-          product,
-          quantity: 1,
-        },
-      ];
-    });
+export const CartProvider = ({ children }: CartProviderProps) => {
+  const [items, setItems] = useState<CartItem[]>(loadCart);
+
+  // Keep the latest cart available for synchronous stock validation.
+  const itemsRef = useRef<CartItem[]>(items);
+
+  const commitItems = (nextItems: CartItem[]) => {
+    itemsRef.current = nextItems;
+    setItems(nextItems);
   };
 
-  // Remove product completely from cart
+  // Persist cart changes.
+  useEffect(() => {
+    try {
+      localStorage.setItem("cart", JSON.stringify(items));
+    } catch (error) {
+      console.error("Failed to save cart:", error);
+    }
+  }, [items]);
+
+  const addToCart = (product: Product): AddToCartResult => {
+    if (product.stock <= 0) {
+      return "out-of-stock";
+    }
+
+    const currentItems = itemsRef.current;
+    const existingItem = currentItems.find(
+      (item) => item.product.id === product.id,
+    );
+
+    if (existingItem) {
+      if (existingItem.quantity >= product.stock) {
+        return "stock-limit-reached";
+      }
+
+      const nextItems = currentItems.map((item) =>
+        item.product.id === product.id
+          ? {
+              ...item,
+              product,
+              quantity: Math.min(
+                item.quantity + 1,
+                product.stock,
+              ),
+            }
+          : item,
+      );
+
+      commitItems(nextItems);
+      return "quantity-increased";
+    }
+
+    commitItems([
+      ...currentItems,
+      {
+        product,
+        quantity: 1,
+      },
+    ]);
+
+    return "added";
+  };
+
   const removeFromCart = (productId: string) => {
-    setItems((currentItems) =>
-      currentItems.filter(
-        (item) => item.product.id !== productId
-      )
+    commitItems(
+      itemsRef.current.filter(
+        (item) => item.product.id !== productId,
+      ),
     );
   };
 
-  // Update product quantity
   const updateQuantity = (
     productId: string,
-    quantity: number
+    quantity: number,
   ) => {
-    // If quantity becomes 0, remove the product
     if (quantity <= 0) {
       removeFromCart(productId);
       return;
     }
 
-    setItems((currentItems) =>
-      currentItems.map((item) => {
+    const nextItems = itemsRef.current
+      .map((item) => {
         if (item.product.id !== productId) {
           return item;
         }
 
-        // Don't allow quantity above available stock
         const safeQuantity = Math.min(
-          quantity,
-          item.product.stock
+          Math.floor(quantity),
+          item.product.stock,
         );
 
         return {
@@ -131,30 +173,24 @@ export const CartProvider = ({
           quantity: safeQuantity,
         };
       })
-    );
+      .filter((item) => item.quantity > 0);
+
+    commitItems(nextItems);
   };
 
-  // Empty the entire cart
   const clearCart = () => {
-    setItems([]);
+    commitItems([]);
   };
 
-  // Total number of products in cart
-  const getCartItemCount = () => {
-    return items.reduce(
-      (total, item) => total + item.quantity,
-      0
-    );
-  };
+  const getCartItemCount = () =>
+    items.reduce((total, item) => total + item.quantity, 0);
 
-  // Calculate cart subtotal
-  const getCartSubtotal = () => {
-    return items.reduce(
+  const getCartSubtotal = () =>
+    items.reduce(
       (total, item) =>
         total + item.product.price * item.quantity,
-      0
+      0,
     );
-  };
 
   return (
     <CartContext.Provider
@@ -173,14 +209,11 @@ export const CartProvider = ({
   );
 };
 
-// Custom hook for accessing cart
 export const useCart = () => {
   const context = useContext(CartContext);
 
   if (!context) {
-    throw new Error(
-      "useCart must be used inside CartProvider"
-    );
+    throw new Error("useCart must be used inside CartProvider");
   }
 
   return context;

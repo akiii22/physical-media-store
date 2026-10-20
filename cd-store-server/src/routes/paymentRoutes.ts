@@ -63,7 +63,7 @@ router.post(
 // ADMIN
 // ============================================================
 
-// Get payments waiting for verification
+
 // Get payments waiting for verification
 router.get(
   "/pending",

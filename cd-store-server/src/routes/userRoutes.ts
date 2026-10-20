@@ -1,8 +1,10 @@
+
 import { Router } from "express";
 
 import {
   requireAuth,
   requireAdmin,
+  type AuthenticatedRequest,
 } from "../middleware/authMiddleware";
 
 import {
@@ -11,17 +13,12 @@ import {
   getAllTeamMembers,
   updateTeamMemberStatus,
   updateMyProfile,
-  getMyProfile
+  getMyProfile,
 } from "../controller/userController";
 
 const router = Router();
 
-/*
- * ============================================================
- * ADMIN CUSTOMERS
- * ============================================================
- */
-
+// Admin customers
 router.get(
   "/admin/customers",
   requireAuth,
@@ -29,13 +26,12 @@ router.get(
   getAllCustomers
 );
 
-
-
+// Admin team management
 router.post(
   "/admin/team",
   requireAuth,
   requireAdmin,
-  createTeamMember,
+  createTeamMember
 );
 
 router.get(
@@ -52,6 +48,22 @@ router.patch(
   updateTeamMemberStatus
 );
 
+// Current user's role
+router.get(
+  "/me/role",
+  requireAuth,
+  (req: AuthenticatedRequest, res) => {
+    if (!req.role) {
+      return res.status(403).json({
+        message: "Unable to retrieve account role.",
+      });
+    }
+
+    return res.json({ role: req.role });
+  }
+);
+
+// Current user's profile
 router.get("/me/profile", requireAuth, getMyProfile);
 
 router.patch("/me/profile", requireAuth, updateMyProfile);

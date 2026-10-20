@@ -1,5 +1,8 @@
+
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useMutation } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 import { useCart } from "../context/CartContext";
 import {
@@ -20,7 +23,6 @@ import PaymentMethodComponent from "../components/checkout/PaymentMethod";
 
 const Checkout = () => {
   const { items, getCartSubtotal, clearCart } = useCart();
-
   const navigate = useNavigate();
 
   const [deliveryMethod, setDeliveryMethod] =
@@ -40,17 +42,12 @@ const Checkout = () => {
   const [validationErrors, setValidationErrors] =
     useState<CheckoutValidationErrors>({});
 
-  const [submitting, setSubmitting] = useState(false);
-
   const subtotal = getCartSubtotal();
 
   const requiresDeliveryAddress =
-  deliveryMethod !== "STORE_PICKUP";
+    deliveryMethod !== "STORE_PICKUP";
 
-  /*
-   * Clear one field's validation error
-   * whenever the user starts correcting it.
-   */
+  // Remove a field's validation error when the user corrects it.
   const clearFieldError = (
     field: keyof CheckoutValidationErrors
   ) => {
@@ -106,11 +103,7 @@ const Checkout = () => {
   ) => {
     setDeliveryMethod(value);
 
-    /*
-     * Delivery-only fields should not keep
-     * old validation errors when switching
-     * to store pickup.
-     */
+    // Address fields are not required for store pickup.
     if (value === "STORE_PICKUP") {
       setValidationErrors((current) => {
         const updated = { ...current };
@@ -126,18 +119,43 @@ const Checkout = () => {
     }
   };
 
-  const handleSubmit = async (
+  // TanStack Query manages the order submission lifecycle.
+  const createOrderMutation = useMutation({
+    mutationFn: createOrder,
+
+    onSuccess: (result) => {
+      // Preserve the cart if order creation fails.
+      clearCart();
+
+      toast.success("Order placed successfully!");
+
+      navigate(`/order-confirmation/${result.data.order_id}`);
+    },
+
+    onError: (error) => {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to create order. Please try again."
+      );
+    },
+  });
+
+  const handleSubmit = (
     event: React.FormEvent<HTMLFormElement>
   ) => {
     event.preventDefault();
 
-    if (submitting) {
+    if (createOrderMutation.isPending) {
       return;
     }
 
-    /*
-     * Frontend validation
-     */
+    if (items.length === 0) {
+      toast.error("Your cart is empty.");
+      return;
+    }
+
+    // Validate customer and delivery information.
     const errors = validateCheckout({
       customerName,
       phone,
@@ -151,75 +169,44 @@ const Checkout = () => {
 
     setValidationErrors(errors);
 
-    /*
-     * Don't submit if validation failed.
-     */
     if (Object.keys(errors).length > 0) {
+      toast.error("Please correct the highlighted fields.");
       return;
     }
 
-    try {
-      setSubmitting(true);
+    const orderData = {
+      customer_name: customerName.trim(),
+      phone: phone.trim(),
 
-      const result = await createOrder({
-  customer_name: customerName.trim(),
-  phone: phone.trim(),
+      province: requiresDeliveryAddress
+        ? province.trim()
+        : undefined,
 
-  // Send the address for Nationwide Delivery
-  // and Same-Day Lalamove.
-  // Store Pickup does not need an address.
-  province: requiresDeliveryAddress
-    ? province.trim()
-    : undefined,
+      city: requiresDeliveryAddress
+        ? city.trim()
+        : undefined,
 
-  city: requiresDeliveryAddress
-    ? city.trim()
-    : undefined,
+      barangay: requiresDeliveryAddress
+        ? barangay.trim()
+        : undefined,
 
-  barangay: requiresDeliveryAddress
-    ? barangay.trim()
-    : undefined,
+      street_address: requiresDeliveryAddress
+        ? streetAddress.trim()
+        : undefined,
 
-  street_address: requiresDeliveryAddress
-    ? streetAddress.trim()
-    : undefined,
+      postal_code: requiresDeliveryAddress
+        ? postalCode.trim()
+        : undefined,
 
-  postal_code: requiresDeliveryAddress
-    ? postalCode.trim()
-    : undefined,
+      delivery_method: deliveryMethod,
+      payment_method: paymentMethod,
+      items,
+    };
 
-  delivery_method: deliveryMethod,
-  payment_method: paymentMethod,
-
-  items,
-});
-      console.log("Order created:", result);
-
-      /*
-       * Clear cart only after the order
-       * was successfully created.
-       */
-      clearCart();
-
-      navigate(
-        `/order-confirmation/${result.data.order_id}`
-      );
-    } catch (error) {
-      console.error("Checkout error:", error);
-
-      alert(
-        error instanceof Error
-          ? error.message
-          : "Failed to create order."
-      );
-    } finally {
-      setSubmitting(false);
-    }
+    createOrderMutation.mutate(orderData);
   };
 
-  /*
-   * Empty cart
-   */
+  // Empty cart state.
   if (items.length === 0) {
     return (
       <main className="min-h-screen bg-gray-100 px-6 py-10">
@@ -248,7 +235,6 @@ const Checkout = () => {
   return (
     <main className="min-h-screen bg-gray-100 px-6 py-10">
       <div className="mx-auto max-w-6xl">
-
         {/* Header */}
         <div className="mb-8">
           <Link
@@ -314,10 +300,10 @@ const Checkout = () => {
           <div className="lg:col-span-2">
             <button
               type="submit"
-              disabled={submitting}
+              disabled={createOrderMutation.isPending}
               className="w-full rounded-lg bg-gray-900 px-6 py-3 font-medium text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {submitting
+              {createOrderMutation.isPending
                 ? "Creating Order..."
                 : "Place Order"}
             </button>
