@@ -6,14 +6,18 @@ import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "../lib/supabase";
 
+type UserRole = "ADMIN" | "STAFF" | "CUSTOMER";
+
 type LoginVariables = {
   email: string;
   password: string;
 };
 
 type LoginResult = {
-  role: "ADMIN" | "STAFF" | "CUSTOMER";
+  role: UserRole;
 };
+
+const API_URL = import.meta.env.VITE_API_URL;
 
 const Login = () => {
   const navigate = useNavigate();
@@ -32,39 +36,54 @@ const Login = () => {
 
       if (authError) throw authError;
 
-      const user = authData.user;
+      const session = authData.session;
 
-      if (!user || !authData.session) {
+      if (!authData.user || !session) {
         throw new Error("Unable to retrieve your session.");
       }
 
-      const { data: profile, error: profileError } = await supabase
-        .from("users")
-        .select("role")
-        .eq("id", user.id)
-        .maybeSingle();
+      if (!API_URL) {
+        throw new Error("The API URL is not configured.");
+      }
 
-      if (profileError || !profile) {
-        await supabase.auth.signOut();
+      let response: Response;
 
+      try {
+        response = await fetch(
+          `${API_URL.replace(/\/$/, "")}/users/me/role`,
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${session.access_token}`,
+              Accept: "application/json",
+            },
+          }
+        );
+      } catch {
+        throw new Error("Unable to connect to the server. Please try again.");
+      }
+
+      if (!response.ok) {
+        const result = await response.json().catch(() => null);
         throw new Error(
-          "Unable to retrieve your account role. Please contact support."
+          result?.message || "Unable to retrieve your account role."
         );
       }
 
-      const role = profile.role;
+      const result: unknown = await response.json();
 
       if (
-        role !== "ADMIN" &&
-        role !== "STAFF" &&
-        role !== "CUSTOMER"
+        typeof result !== "object" ||
+        result === null ||
+        !("role" in result) ||
+        !["ADMIN", "STAFF", "CUSTOMER"].includes(
+          String(result.role)
+        )
       ) {
-        await supabase.auth.signOut();
-
-        throw new Error("Your account role is not supported.");
+        throw new Error("Your account role is missing or unsupported.");
       }
 
-      return { role };
+      return { role: result.role as UserRole };
     },
 
     onSuccess: ({ role }) => {
@@ -72,22 +91,16 @@ const Login = () => {
         description: "Welcome back.",
       });
 
-      switch (role) {
-        case "ADMIN":
-        case "STAFF":
-          navigate("/admin", { replace: true });
-          break;
-
-        case "CUSTOMER":
-          navigate("/products", { replace: true });
-          break;
+      if (role === "ADMIN" || role === "STAFF") {
+        navigate("/admin", { replace: true });
+      } else {
+        navigate("/products", { replace: true });
       }
     },
 
     onError: (error) => {
       toast.error("Login failed", {
-        description:
-          error.message || "Please check your credentials and try again.",
+        description: error.message || "Please check your credentials.",
       });
     },
   });
@@ -107,25 +120,14 @@ const Login = () => {
     <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
         <div className="mx-auto h-12 w-12 rounded-xl bg-slate-900 flex items-center justify-center text-white shadow-lg">
-          <svg
-            className="h-6 w-6"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M13 10V3L4 14h7v7l9-11h-7z"
-            />
+          <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
         </div>
 
         <h2 className="mt-4 text-3xl font-extrabold text-slate-900 tracking-tight">
           Welcome back
         </h2>
-
         <p className="mt-2 text-sm text-slate-600">
           Please sign in to access your account
         </p>
@@ -135,13 +137,9 @@ const Login = () => {
         <div className="bg-white py-8 px-6 shadow-xl shadow-slate-200/50 sm:rounded-2xl border border-slate-100 sm:px-10">
           <form onSubmit={handleLogin} className="space-y-5">
             <div>
-              <label
-                htmlFor="email"
-                className="block text-sm font-medium text-slate-700 mb-1"
-              >
+              <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1">
                 Email address
               </label>
-
               <input
                 id="email"
                 type="email"
@@ -150,18 +148,14 @@ const Login = () => {
                 onChange={(event) => setEmail(event.target.value)}
                 required
                 placeholder="you@example.com"
-                className="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-slate-900 placeholder-slate-400 transition-all duration-200 outline-none focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 sm:text-sm"
+                className="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-slate-900 placeholder-slate-400 outline-none focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 sm:text-sm"
               />
             </div>
 
             <div>
-              <label
-                htmlFor="password"
-                className="block text-sm font-medium text-slate-700 mb-1"
-              >
+              <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-1">
                 Password
               </label>
-
               <div className="relative">
                 <input
                   id="password"
@@ -171,59 +165,21 @@ const Login = () => {
                   onChange={(event) => setPassword(event.target.value)}
                   required
                   placeholder="••••••••"
-                  className="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 pr-11 text-slate-900 placeholder-slate-400 transition-all duration-200 outline-none focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 sm:text-sm"
+                  className="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 pr-11 text-slate-900 placeholder-slate-400 outline-none focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 sm:text-sm"
                 />
-
                 <button
                   type="button"
                   onClick={() => setShowPassword((current) => !current)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                   aria-label={showPassword ? "Hide password" : "Show password"}
                 >
-                  {showPassword ? (
-                    <svg
-                      className="h-5 w-5"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M13.875 18.825A10.05 10.05 0 0112 19c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24M1 1l22 22"
-                      />
-                    </svg>
-                  ) : (
-                    <svg
-                      className="h-5 w-5"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                      />
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                      />
-                    </svg>
-                  )}
+                  {showPassword ? "Hide" : "Show"}
                 </button>
               </div>
             </div>
 
             <div className="flex justify-end">
-              <Link
-                to="/forgot-password"
-                className="text-sm font-semibold text-slate-700 hover:text-slate-900 hover:underline"
-              >
+              <Link to="/forgot-password" className="text-sm font-semibold text-slate-700 hover:text-slate-900 hover:underline">
                 Forgot Password?
               </Link>
             </div>
@@ -231,43 +187,15 @@ const Login = () => {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full cursor-pointer flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-slate-800 active:scale-[0.99] transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100"
+              className="w-full flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {isLoading ? (
-                <>
-                  <svg
-                    className="h-4 w-4 animate-spin text-white"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    />
-                  </svg>
-                  <span>Logging in...</span>
-                </>
-              ) : (
-                "Sign in"
-              )}
+              {isLoading ? "Logging in..." : "Sign in"}
             </button>
           </form>
 
           <div className="mt-6 border-t border-slate-100 pt-6 text-center text-sm text-slate-600">
             Don't have an account?{" "}
-            <Link
-              to="/register"
-              className="font-semibold text-slate-900 hover:underline transition-all"
-            >
+            <Link to="/register" className="font-semibold text-slate-900 hover:underline">
               Create an account
             </Link>
           </div>

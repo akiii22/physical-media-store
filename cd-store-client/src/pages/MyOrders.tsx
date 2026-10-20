@@ -156,15 +156,15 @@ const getPaymentClass = (status: string) => {
  */
 
 const MyOrders = () => {
-  const [orders, setOrders] = useState<Order[]>([]);
+ const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
-  /*
-   * ==========================================================
-   * LOAD ORDERS
-   * ==========================================================
-   */
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalOrders, setTotalOrders] = useState(0);
+
+  const ORDERS_PER_PAGE = 5;
 
   useEffect(() => {
     let cancelled = false;
@@ -184,11 +184,14 @@ const MyOrders = () => {
           );
         }
 
-        const response = await fetch(`${API_URL}/orders/my`, {
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
-        });
+        const response = await fetch(
+          `${API_URL}/orders/my?page=${currentPage}&limit=${ORDERS_PER_PAGE}`,
+          {
+            headers: {
+              Authorization: `Bearer ${session.access_token}`,
+            },
+          }
+        );
 
         const data = await response.json();
 
@@ -200,6 +203,8 @@ const MyOrders = () => {
 
         if (!cancelled) {
           setOrders(data.data ?? []);
+          setTotalOrders(data.pagination?.total ?? 0);
+          setTotalPages(data.pagination?.totalPages ?? 0);
         }
       } catch (err) {
         console.error("Failed to load customer orders:", err);
@@ -210,6 +215,7 @@ const MyOrders = () => {
               ? err.message
               : "Failed to retrieve your orders."
           );
+          setOrders([]);
         }
       } finally {
         if (!cancelled) {
@@ -223,8 +229,7 @@ const MyOrders = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
-
+  }, [currentPage]);
   /*
    * ============================================================
    * LOADING
@@ -309,13 +314,15 @@ const MyOrders = () => {
               </p>
             </div>
 
-            {orders.length > 0 && (
-              <div className="inline-flex w-fit items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-gray-200">
-                <ShoppingBag className="h-4 w-4" />
-                {orders.length}{" "}
-                {orders.length === 1 ? "order" : "orders"}
-              </div>
-            )}
+            
+{totalOrders > 0 && (
+  <div className="inline-flex w-fit items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-gray-200">
+    <ShoppingBag className="h-4 w-4" />
+    <span>
+      {totalOrders} {totalOrders === 1 ? "order" : "orders"}
+    </span>
+  </div>
+)}
           </div>
         </div>
 
@@ -560,8 +567,48 @@ const MyOrders = () => {
               );
             })}
           </div>
+          
         )}
       </div>
+      
+{totalPages > 1 && (
+  <div className="flex flex-col gap-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+    <p className="text-sm text-gray-600">
+      Page <span className="font-semibold">{currentPage}</span> of{" "}
+      <span className="font-semibold">{totalPages}</span>
+      <span className="mt-1 block text-xs text-gray-500 sm:mt-0 sm:inline">
+        {" "}· {totalOrders} total orders
+      </span>
+    </p>
+
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={() =>
+          setCurrentPage((page) => Math.max(1, page - 1))
+        }
+        disabled={currentPage === 1 || isLoading}
+        className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        Previous
+      </button>
+
+      <button
+        type="button"
+        onClick={() =>
+          setCurrentPage((page) =>
+            Math.min(totalPages, page + 1)
+          )
+        }
+        disabled={currentPage >= totalPages || isLoading}
+        className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        Next
+      </button>
+    </div>
+  </div>
+)}
+
     </main>
   );
 };

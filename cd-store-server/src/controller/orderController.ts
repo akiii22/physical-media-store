@@ -854,6 +854,7 @@ export const updateShipment = async (
   }
 };
 
+
 export const getMyOrders = async (
   req: AuthenticatedRequest,
   res: Response
@@ -867,51 +868,76 @@ export const getMyOrders = async (
       });
     }
 
-    const { data, error } = await supabase
+    const pageParam = Number(req.query.page ?? 1);
+    const limitParam = Number(req.query.limit ?? 5);
+
+    const page = Number.isInteger(pageParam) && pageParam > 0
+      ? pageParam
+      : 1;
+
+    const limit = Number.isInteger(limitParam) && limitParam > 0
+      ? Math.min(limitParam, 20)
+      : 5;
+
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    const { data, error, count } = await supabase
       .from("orders")
-      .select(`
-        *,
-        order_items (
-          id,
-          product_id,
-          quantity,
-          unit_price
-        ),
-      payments (
-  id,
-  method,
-  amount,
-  status,
-  payment_type,
-  proof_url,
-  provider_reference,
-  paid_at
-),
-        shipments (
-          id,
-          courier,
-          tracking_number,
-          status,
-          tracking_url,
-          shipped_at,
-          delivered_at
-        )
-      `)
+      .select(
+        `
+          *,
+          order_items (
+            id,
+            product_id,
+            quantity,
+            unit_price
+          ),
+          payments (
+            id,
+            method,
+            amount,
+            status,
+            payment_type,
+            proof_url,
+            provider_reference,
+            paid_at
+          ),
+          shipments (
+            id,
+            courier,
+            tracking_number,
+            status,
+            tracking_url,
+            shipped_at,
+            delivered_at
+          )
+        `,
+        { count: "exact" }
+      )
       .eq("user_id", userId)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .range(from, to);
 
     if (error) {
       console.error("Failed to retrieve customer orders:", error);
 
       return res.status(500).json({
         message: "Failed to retrieve your orders.",
-        error: error.message,
       });
     }
 
+    const total = count ?? 0;
+
     return res.status(200).json({
       message: "Orders retrieved successfully.",
-      data,
+      data: data ?? [],
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
     });
   } catch (error) {
     console.error("Get my orders error:", error);
@@ -921,6 +947,7 @@ export const getMyOrders = async (
     });
   }
 };
+
 
 
 // ============================================================

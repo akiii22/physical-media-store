@@ -1,3 +1,4 @@
+
 import {
   createContext,
   useContext,
@@ -18,6 +19,8 @@ type AuthContextType = {
   logout: () => Promise<void>;
 };
 
+const API_URL = import.meta.env.VITE_API_URL;
+
 const AuthContext = createContext<AuthContextType | undefined>(
   undefined
 );
@@ -26,71 +29,130 @@ type AuthProviderProps = {
   children: ReactNode;
 };
 
+const isRole = (value: unknown): value is Role =>
+  value === "ADMIN" ||
+  value === "STAFF" ||
+  value === "CUSTOMER";
+
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [role, setRole] = useState<Role | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const loadUserRole = async (userId: string) => {
-    const { data, error } = await supabase
-      .from("users")
-      .select("role")
-      .eq("id", userId)
-      .single();
-
-    if (error) {
-      console.error("Failed to load user role:", error);
-      setRole(null);
-      return;
+  const loadUserRole = async (
+    currentSession: Session
+  ): Promise<Role | null> => {
+    if (!API_URL) {
+      console.error("VITE_API_URL is not configured.");
+      return null;
     }
 
-    setRole(data.role as Role);
+    try {
+      const response = await fetch(
+        `${API_URL.replace(/\/$/, "")}/users/me/role`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${currentSession.access_token}`,
+            Accept: "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const result = await response.json().catch(() => null);
+
+        console.error(
+          "Failed to load user role:",
+          response.status,
+          result?.message ?? response.statusText
+        );
+
+        return null;
+      }
+
+      const result: unknown = await response.json();
+
+      if (
+        typeof result !== "object" ||
+        result === null ||
+        !("role" in result) ||
+        !isRole(result.role)
+      ) {
+        console.error("The API returned an invalid user role.");
+        return null;
+      }
+
+      return result.role;
+    } catch (error) {
+      console.error("Unable to connect to the role API:", error);
+      return null;
+    }
   };
 
   useEffect(() => {
-    const getInitialSession = async () => {
-      try {
-        const { data, error } = await supabase.auth.getSession();
+    let active = true;
+    let latestSession: Session | null = null;
+    let requestId = 0;
 
-        if (error) {
-          console.error("Failed to get session:", error);
-          return;
-        }
+    const syncSession = async (currentSession: Session | null) => {
+      latestSession = currentSession;
+      const currentRequestId = ++requestId;
 
-        const currentSession = data.session;
+      if (!active) return;
 
-        setSession(currentSession);
-        setUser(currentSession?.user ?? null);
+      setSession(currentSession);
+      setUser(currentSession?.user ?? null);
+      setRole(null);
 
-        if (currentSession?.user) {
-          await loadUserRole(currentSession.user.id);
-        } else {
-          setRole(null);
-        }
-      } finally {
+      if (!currentSession) {
         setIsLoading(false);
+        return;
       }
+
+      setIsLoading(true);
+
+      const nextRole = await loadUserRole(currentSession);
+
+      if (
+        !active ||
+        currentRequestId !== requestId ||
+        latestSession?.user.id !== currentSession.user.id
+      ) {
+        return;
+      }
+
+      setRole(nextRole);
+      setIsLoading(false);
     };
 
-    getInitialSession();
+    const initialize = async () => {
+      const { data, error } = await supabase.auth.getSession();
+
+      if (!active) return;
+
+      if (error) {
+        console.error("Failed to get session:", error);
+        setIsLoading(false);
+        return;
+      }
+
+      await syncSession(data.session);
+    };
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(
-      (_event, currentSession) => {
-        setSession(currentSession);
-        setUser(currentSession?.user ?? null);
+    } = supabase.auth.onAuthStateChange((_event, currentSession) => {
+      // Avoid awaiting network requests inside the auth callback.
+      void syncSession(currentSession);
+    });
 
-        if (currentSession?.user) {
-          loadUserRole(currentSession.user.id);
-        } else {
-          setRole(null);
-        }
-      }
-    );
+    void initialize();
 
     return () => {
+      active = false;
+      requestId++;
       subscription.unsubscribe();
     };
   }, []);

@@ -938,18 +938,6 @@ console.log("PRODUCT PAYMENT:", productPayment);
                 </div>
               )}
             </div>
-
-            {shipment.tracking_url && (
-              <a
-                href={shipment.tracking_url}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-gray-700 sm:w-auto"
-              >
-                <Truck className="h-4 w-4" />
-                Track Package
-              </a>
-            )}
           </section>
         )}
 
