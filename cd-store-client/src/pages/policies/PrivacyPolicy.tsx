@@ -4,7 +4,7 @@ const PrivacyPolicy = () => {
   return (
     <PolicyLayout
       title="Privacy Policy"
-      intro="At Plakados, we respect your privacy and are committed to protecting your personal information."
+      intro="At CDSatBP, we respect your privacy and are committed to protecting your personal information."
       sections={[
         {
           heading: "Information We Collect",
@@ -21,7 +21,7 @@ const PrivacyPolicy = () => {
         {
           heading: "Privacy Concerns",
           paragraphs: [
-            "For any privacy-related concerns, please contact us at Plakadosph@gmail.com.",
+            "For any privacy-related concerns, please contact us at cdsatbplmtd@gmail.com",
           ],
         },
       ]}

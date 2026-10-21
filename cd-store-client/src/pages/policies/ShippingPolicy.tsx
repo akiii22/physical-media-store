@@ -4,7 +4,7 @@ const ShippingPolicy = () => {
   return (
     <PolicyLayout
       title="Shipping Policy"
-      intro="PlakadosPH ships vinyl records nationwide within the Philippines."
+      intro="CDSatbp ships vinyl records nationwide within the Philippines."
       sections={[
         {
           heading: "Order Processing",

@@ -4,7 +4,7 @@ const ReturnRefundPolicy = () => {
   return (
     <PolicyLayout
       title="Return & Refund Policy"
-      intro="At PlakadosPH, customer satisfaction is important to us. We offer a 7-day return period from the date the customer receives the item."
+      intro="At CDsAtbp, customer satisfaction is important to us. We offer a 7-day return period from the date the customer receives the item."
       sections={[
         {
           heading: "Eligible Returns",
@@ -21,7 +21,7 @@ const ReturnRefundPolicy = () => {
         {
           heading: "How to Request a Return",
           paragraphs: [
-            "To request a return, customers must contact Plakadosph@gmail.com within 7 days of receiving their order and provide clear photos or videos of the issue.",
+            "To request a return, customers must contact cdsatbplmtd@gmail.com within 7 days of receiving their order and provide clear photos or videos of the issue.",
             "All returned items must remain in their original condition, including any inserts, sleeves, and packaging whenever possible.",
             "Refunds or replacements will be processed after inspection and approval.",
           ],
@@ -54,7 +54,7 @@ const ReturnRefundPolicy = () => {
         {
           heading: "Acknowledgment",
           paragraphs: [
-            "By placing an order with Plakados, customers acknowledge and agree to this Return & Refund Policy.",
+            "By placing an order with CDSatbp, customers acknowledge and agree to this Return & Refund Policy.",
           ],
         },
       ]}

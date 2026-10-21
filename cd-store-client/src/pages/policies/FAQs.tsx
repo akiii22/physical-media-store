@@ -10,7 +10,7 @@ const faqs = [
   },
   {
     question: "What payment methods do you accept?",
-    answer: "We accept QRPh payments and major credit cards.",
+    answer: "We accept QRPh payments through GCash, BPI, BDO, GoTyme Bank, and MariBank, subject to availability.",
   },
   {
     question: "Which couriers do you use?",

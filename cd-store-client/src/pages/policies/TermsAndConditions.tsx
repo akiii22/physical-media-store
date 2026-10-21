@@ -4,7 +4,7 @@ const TermsAndConditions = () => {
   return (
     <PolicyLayout
       title="Terms and Conditions"
-      intro="By accessing and using the PlakadosPH website, you agree to these terms and conditions."
+      intro="By accessing and using the CDSatbp website, you agree to these terms and conditions."
       sections={[
         {
           heading: "Product Availability and Information",
