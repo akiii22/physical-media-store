@@ -1,261 +1,451 @@
 import { useEffect, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+
 import {
   ArrowLeft,
+  CheckCircle2,
   ImageIcon,
   Save,
   X,
 } from "lucide-react";
+
 import { useNavigate, useParams } from "react-router-dom";
+
 import {
+
   getProductById,
+
   getProducts,
+
   updateProduct,
+
   type ProductFormData,
+
 } from "../../services/productServices";
 
 type MediaType = {
+
   id: string;
+
   name: string;
+
   created_at?: string;
+
 };
 
 const EditProduct = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const { id } = useParams<{ id: string }>();
+
   const [categories, setCategories] = useState<
+
     { id: string; name: string }[]
+
   >([]);
+
   const [mediaTypes, setMediaTypes] = useState<MediaType[]>([]);
+
   const [loadingMediaTypes, setLoadingMediaTypes] = useState(true);
+
   const [mediaTypeError, setMediaTypeError] = useState("");
 
   const [formData, setFormData] = useState({
+
     name: "",
+
     description: "",
+
     media_type: "CD",
+
     condition: "USED",
+
     price: "",
+
     stock: "",
+
     category_id: "",
+
     discount: "",
+
+  });
+
+  const updateProductMutation = useMutation({
+    mutationFn: (productData: ProductFormData) => {
+      if (!id) throw new Error("Product ID is missing.");
+      return updateProduct(id, productData);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["admin-products"] });
+      setShowSuccessModal(true);
+      toast.success("Product updated successfully.");
+    },
+    onError: (mutationError) => {
+      const message =
+        mutationError instanceof Error
+          ? mutationError.message
+          : "Failed to update product.";
+      setError(message);
+      toast.error(message);
+    },
   });
 
   const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(
+
     null
+
   );
+
   const [image, setImage] = useState<File | null>(null);
+
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+
   const [loading, setLoading] = useState(true);
+
   const [saving, setSaving] = useState(false);
+
   const [error, setError] = useState("");
+
   // --------------------------------------------------
   // Load media types from Admin Settings catalog
   // --------------------------------------------------
-
   useEffect(() => {
+
     const loadMediaTypes = async () => {
+
       try {
+
         setLoadingMediaTypes(true);
+
         setMediaTypeError("");
 
         const apiUrl = import.meta.env.VITE_API_URL;
+
         if (!apiUrl) throw new Error("API URL is not configured.");
 
         const response = await fetch(`${apiUrl}/media-types`);
+
         if (!response.ok) throw new Error("Failed to load media types.");
 
         const result: { data?: MediaType[] } | MediaType[] =
+
           await response.json();
+
         const list = Array.isArray(result)
+
           ? result
+
           : Array.isArray(result.data)
+
             ? result.data
+
             : [];
 
         setMediaTypes(list);
+
         if (list.length === 0) {
+
           setMediaTypeError(
+
             "No media types are available. Add a media type in Admin Settings."
+
           );
+
         }
+
       } catch (loadError) {
+
         console.error("Error loading media types:", loadError);
+
         setMediaTypeError(
+
           loadError instanceof Error
+
             ? loadError.message
+
             : "Failed to load media types."
+
         );
+
       } finally {
+
         setLoadingMediaTypes(false);
+
       }
+
     };
 
     void loadMediaTypes();
+
   }, []);
 
   // Load product
   // --------------------------------------------------
-
   useEffect(() => {
+
     const loadProduct = async () => {
+
       if (!id) {
+
         setError("Product ID is missing.");
+
         setLoading(false);
+
         return;
+
       }
+
       try {
+
         const [product, productsResult] = await Promise.all([
+
           getProductById(id),
+
           getProducts({page:1, limit:48}),
+
         ]);
 
         const products = productsResult.data
+
   // Get unique categories
         const uniqueCategories = Array.from(
+
   new Map<
+
     string,
+
     { id: string; name: string }
+
   >(
+
     products
+
       .filter((item) => item.categories)
+
       .map((item) => [
+
         item.categories!.id,
+
         {
+
           id: item.categories!.id,
+
           name: item.categories!.name,
+
         },
+
       ]),
+
   ).values(),
+
         );
 
         setCategories(uniqueCategories);
+
         setFormData({
+
           name: product.name,
+
           description: product.description || "",
+
           media_type: product.media_type,
+
           condition: product.condition,
+
           price: String(product.price),
+
           stock: String(product.stock),
+
           category_id: product.categories?.id || "",
+
           discount: ""
+
         });
 
         setCurrentImageUrl(product.image_url);
+
       } catch (error) {
+
         console.error("Error loading product:", error);
+
         setError(
+
           error instanceof Error
+
             ? error.message
+
             : "Failed to load product."
+
         );
 
       } finally {
+
         setLoading(false);
+
       }
+
     };
+
     loadProduct();
+
   }, [id]);
+
   // --------------------------------------------------
   // Cleanup image preview
   // --------------------------------------------------
-
   useEffect(() => {
+
     return () => {
+
       if (imagePreview) {
+
         URL.revokeObjectURL(imagePreview);
+
       }
 
     };
 
   }, [imagePreview]);
+
   // --------------------------------------------------
   // Form changes
   // --------------------------------------------------
-
   const handleChange = (
+
     e: React.ChangeEvent<
+
       HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+
     >
+
   ) => {
 
     const { name, value } = e.target;
+
     setFormData((previous) => ({
+
       ...previous,
+
       [name]: value,
+
     }));
 
   };
+
   // --------------------------------------------------
   // Image selection
   // --------------------------------------------------
-
   const handleImageChange = (
+
     e: React.ChangeEvent<HTMLInputElement>
+
   ) => {
+
     const file = e.target.files?.[0];
+
     if (!file) return;
+
     const allowedTypes = [
+
       "image/jpeg",
+
       "image/png",
+
       "image/webp",
+
     ];
+
     if (!allowedTypes.includes(file.type)) {
+
       setError("Only JPG, PNG, and WEBP images are allowed.");
+
       return;
+
     }
 
     if (file.size > 5 * 1024 * 1024) {
+
       setError("Image size must be less than 5MB.");
+
       return;
+
     }
 
     setError("");
+
   // Remove previous preview URL
     if (imagePreview) {
+
       URL.revokeObjectURL(imagePreview);
+
     }
 
     setImage(file);
+
     setImagePreview(URL.createObjectURL(file));
+
   };
+
   // --------------------------------------------------
   // Remove newly selected image
   // --------------------------------------------------
-
   const handleRemoveNewImage = () => {
+
     if (imagePreview) {
+
       URL.revokeObjectURL(imagePreview);
+
     }
 
     setImage(null);
+
     setImagePreview(null);
+
   };
+
   // --------------------------------------------------
   // Submit
   // --------------------------------------------------
-
   const handleSubmit = async (
+
     e: React.FormEvent<HTMLFormElement>
+
   ) => {
+
     e.preventDefault();
+
     if (!id) {
+
       setError("Product ID is missing.");
+
       return;
+
     }
 
     if (!formData.name.trim()) {
+
       setError("Product name is required.");
+
       return;
+
     }
 
     if (!formData.media_type.trim()) {
+
       setError("Please select a media type.");
+
       return;
+
     }
 
     if (!formData.category_id) {
+
       setError("Please select a category.");
+
       return;
+
     }
 
     if (
@@ -309,8 +499,8 @@ const EditProduct = () => {
         category_id: formData.category_id,
 
         image: image ?? undefined,
-  // Demo only
 
+  // Demo only
         discount:
 
           formData.discount === ""
@@ -321,9 +511,7 @@ const EditProduct = () => {
 
       };
 
-      await updateProduct(id, productData);
-
-      navigate("/admin/products");
+      await updateProductMutation.mutateAsync(productData);
 
     } catch (error) {
 
@@ -346,10 +534,10 @@ const EditProduct = () => {
     }
 
   };
+
   // --------------------------------------------------
   // Loading state
   // --------------------------------------------------
-
   if (loading) {
 
     return (
@@ -367,10 +555,10 @@ const EditProduct = () => {
     );
 
   }
+
   // --------------------------------------------------
   // UI
   // --------------------------------------------------
-
   return (
 
     <div className="min-h-screen bg-gray-100">
@@ -387,7 +575,7 @@ const EditProduct = () => {
 
             onClick={() => navigate("/admin/products")}
 
-            className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 transition hover:bg-gray-50"
+            className="cursor-pointer flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 transition hover:bg-gray-50"
 
           >
 
@@ -526,33 +714,59 @@ const EditProduct = () => {
                       >
 
                         {loadingMediaTypes ? (
+
                           <option value={formData.media_type}>
+
                             Loading media types...
+
                           </option>
+
                         ) : (
+
                           <>
+
                             {formData.media_type &&
+
                               !mediaTypes.some(
+
                                 (mediaType) =>
+
                                   mediaType.name === formData.media_type
+
                               ) && (
+
                                 <option value={formData.media_type}>
+
                                   {formData.media_type} (current value)
+
                                 </option>
+
                               )}
+
                             {mediaTypes.map((mediaType) => (
+
                               <option key={mediaType.id} value={mediaType.name}>
+
                                 {mediaType.name}
+
                               </option>
+
                             ))}
+
                           </>
+
                         )}
 
                       </select>
+
                       {mediaTypeError && (
+
                         <p className="mt-2 text-xs text-red-600">
+
                           {mediaTypeError}
+
                         </p>
+
                       )}
 
                     </div>
@@ -704,143 +918,316 @@ const EditProduct = () => {
                     <input
 
                       type="number"
+
                       name="stock"
+
                       value={formData.stock}
+
                       onChange={handleChange}
+
                       min="0"
+
                       step="1"
+
                       className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
+
                     />
+
                   </div>
 
                   {/* Discount */}
+
                   <div>
+
                     <label className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700">
+
                       Discount
+
                       <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
+
                         DEMO
+
                       </span>
+
                     </label>
+
                     <div className="relative">
+
                       <input
+
                         type="number"
+
                         name="discount"
+
                         value={formData.discount}
+
                         onChange={handleChange}
+
                         min="0"
+
                         max="100"
+
                         placeholder="0"
+
                         className="w-full rounded-lg border border-gray-300 px-4 py-2.5 pr-10 text-sm outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
+
                       />
+
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">
+
                         %
+
                       </span>
+
                     </div>
+
                   </div>
+
                 </div>
+
                 <p className="mt-3 text-xs text-gray-400">
+
                   Discount is currently for demonstration only and
+
                   is not saved to the database.
+
                 </p>
+
               </div>
+
             </div>
 
             {/* Image */}
 
             <div>
+
               <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+
                 <h2 className="mb-5 text-lg font-semibold text-gray-900">
+
                   Product Image
+
                 </h2>
 
                 {/* Image preview */}
+
                 {(imagePreview || currentImageUrl) ? (
+
                   <div className="relative mb-4 overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+
                     <img
+
                       src={
+
                         imagePreview ||
+
                         currentImageUrl ||
+
                         undefined
+
                       }
+
                       alt={formData.name || "Product"}
+
                       className="h-64 w-full object-contain"
+
                     />
+
                     {imagePreview && (
+
                       <button
+
                         type="button"
+
                         onClick={handleRemoveNewImage}
-                        className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-white text-gray-700 shadow-md transition hover:bg-gray-100"
+
+                        className="cursor-pointer absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-white text-gray-700 shadow-md transition hover:bg-gray-100"
+
                         title="Remove new image"
+
                       >
+
                         <X size={16} />
+
                       </button>
+
                     )}
+
                   </div>
+
                 ) : (
+
                   <div className="mb-4 flex h-64 items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-gray-50">
+
                     <div className="text-center">
+
                       <ImageIcon
+
                         size={40}
+
                         className="mx-auto mb-3 text-gray-400"
+
                       />
+
                       <p className="text-sm font-medium text-gray-600">
+
                         No image
+
                       </p>
+
                       <p className="mt-1 text-xs text-gray-400">
+
                         Upload an image below
+
                       </p>
+
                     </div>
+
                   </div>
+
                 )}
+
                 {/* Upload */}
+
                 <label className="block cursor-pointer rounded-lg border border-gray-300 bg-white px-4 py-3 text-center text-sm font-medium text-gray-700 transition hover:bg-gray-50">
+
                   {image
+
                     ? "Choose Different Image"
+
                     : currentImageUrl
+
                       ? "Replace Image"
+
                       : "Choose Image"}
+
                   <input
+
                     type="file"
+
                     accept="image/jpeg,image/png,image/webp"
+
                     onChange={handleImageChange}
+
                     className="hidden"
+
                   />
+
                 </label>
+
                 <p className="mt-3 text-xs leading-5 text-gray-400">
+
                   JPG, PNG, or WEBP. Maximum file size: 5MB.
+
                 </p>
+
                 {image && (
+
                   <p className="mt-2 truncate text-xs text-gray-500">
+
                     New image: {image.name}
+
                   </p>
+
                 )}
+
               </div>
+
             </div>
+
           </div>
 
           {/* Actions */}
+
           <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+
+            <button
+
+              type="button"
+
+              onClick={() => navigate("/admin/products")}
+
+              disabled={saving}
+
+              className="cursor-pointer rounded-lg border border-gray-300 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+
+            >
+
+              Cancel
+
+            </button>
+
+            <button
+
+              type="submit"
+
+              disabled={saving || loadingMediaTypes || mediaTypes.length === 0}
+
+              className="cursor-pointer flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+
+            >
+
+              <Save size={18} />
+
+              {saving ? "Saving..." : "Save Changes"}
+
+            </button>
+
+          </div>
+
+        </form>
+
+      </div>
+
+    {showSuccessModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <section
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="product-updated-title"
+          className="relative w-full max-w-md rounded-2xl bg-white p-6 text-center shadow-xl sm:p-8"
+        >
+          <button
+            type="button"
+            aria-label="Close success dialog"
+            onClick={() => setShowSuccessModal(false)}
+            className="cursor-pointer absolute right-4 top-4 rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
+          >
+            <X size={18} />
+          </button>
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-100 bg-emerald-50 text-emerald-600">
+            <CheckCircle2 size={34} strokeWidth={1.8} aria-hidden="true" />
+          </div>
+          <h2 id="product-updated-title" className="mt-5 text-xl font-bold text-gray-900">
+            Product updated successfully
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-gray-600">
+            Your changes have been saved to the store inventory.
+          </p>
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
             <button
               type="button"
               onClick={() => navigate("/admin/products")}
-              disabled={saving}
-              className="rounded-lg border border-gray-300 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              className="cursor-pointer flex-1 rounded-xl bg-gray-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-gray-800"
             >
-              Cancel
+              Back to Products
             </button>
             <button
-              type="submit"
-              disabled={saving || loadingMediaTypes || mediaTypes.length === 0}
-              className="flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+              type="button"
+              onClick={() => setShowSuccessModal(false)}
+              className="cursor-pointer flex-1 rounded-xl border border-gray-200 px-4 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
             >
-              <Save size={18} />
-              {saving ? "Saving..." : "Save Changes"}
+              Continue Editing
             </button>
           </div>
-        </form>
+        </section>
       </div>
+    )}
+
     </div>
+
   );
+
 };
 
 export default EditProduct;

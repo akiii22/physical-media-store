@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent, useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   Edit,
   Folder,
@@ -31,10 +33,8 @@ type ModalType = "CATEGORY" | "MEDIA_TYPE" | null;
 const API_URL = import.meta.env.VITE_API_URL;
 
 const AdminSettings = () => {
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [mediaTypes, setMediaTypes] = useState<MediaType[]>([]);
-  const [loadingCategories, setLoadingCategories] = useState(true);
-  const [loadingMediaTypes, setLoadingMediaTypes] = useState(true);
+  const queryClient = useQueryClient();
+  const [itemToDelete, setItemToDelete] = useState<{ type: "CATEGORY" | "MEDIA_TYPE"; item: Category | MediaType } | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -57,52 +57,32 @@ const AdminSettings = () => {
     return session.access_token;
   }, []);
 
-  const loadCategories = useCallback(async () => {
-    setLoadingCategories(true);
-    setError("");
-    try {
+  const categoriesQuery = useQuery({
+    queryKey: ["admin-settings", "categories"],
+    queryFn: async (): Promise<Category[]> => {
       if (!API_URL) throw new Error("VITE_API_URL is not configured.");
-
       const response = await fetch(`${API_URL}/categories`);
       const result = await response.json();
+      if (!response.ok) throw new Error(result.message || "Failed to load categories.");
+      return result.data ?? [];
+    },
+  });
 
-      if (!response.ok) {
-        throw new Error(result.message || "Failed to load categories.");
-      }
-
-      setCategories(result.data ?? []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load categories.");
-    } finally {
-      setLoadingCategories(false);
-    }
-  }, []);
-
-  const loadMediaTypes = useCallback(async () => {
-    setLoadingMediaTypes(true);
-    setError("");
-    try {
+  const mediaTypesQuery = useQuery({
+    queryKey: ["admin-settings", "media-types"],
+    queryFn: async (): Promise<MediaType[]> => {
       if (!API_URL) throw new Error("VITE_API_URL is not configured.");
-
       const response = await fetch(`${API_URL}/media-types`);
       const result = await response.json();
+      if (!response.ok) throw new Error(result.message || "Failed to load media types.");
+      return result.data ?? [];
+    },
+  });
 
-      if (!response.ok) {
-        throw new Error(result.message || "Failed to load media types.");
-      }
-
-      setMediaTypes(result.data ?? []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load media types.");
-    } finally {
-      setLoadingMediaTypes(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadCategories();
-    void loadMediaTypes();
-  }, [loadCategories, loadMediaTypes]);
+  const categories = categoriesQuery.data ?? [];
+  const mediaTypes = mediaTypesQuery.data ?? [];
+  const loadingCategories = categoriesQuery.isLoading || categoriesQuery.isFetching;
+  const loadingMediaTypes = mediaTypesQuery.isLoading || mediaTypesQuery.isFetching;
 
   const filteredCategories = useMemo(() => {
     const query = searchCategory.trim().toLowerCase();
@@ -171,13 +151,18 @@ const AdminSettings = () => {
 
       if (!response.ok) throw new Error(result.message || "Failed to save category.");
 
-      await loadCategories();
-      setSuccess(result.message || (isEditing ? "Category updated." : "Category added."));
+      await queryClient.invalidateQueries({ queryKey: ["admin-settings", "categories"] });
+      const message = result.message || (isEditing ? "Category updated." : "Category added.");
+      setSuccess(message);
+      toast.success(message);
+      void queryClient.invalidateQueries({ queryKey: ["admin-settings", "categories"] });
       setModalType(null);
       setEditingId(null);
       setName("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save category.");
+      const message = err instanceof Error ? err.message : "Failed to save category.";
+      setError(message);
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -211,13 +196,18 @@ const AdminSettings = () => {
         throw new Error(result.message || "Failed to save media type.");
       }
 
-      await loadMediaTypes();
-      setSuccess(result.message || (isEditing ? "Media type updated." : "Media type added."));
+      await queryClient.invalidateQueries({ queryKey: ["admin-settings", "media-types"] });
+      const message = result.message || (isEditing ? "Media type updated." : "Media type added.");
+      setSuccess(message);
+      toast.success(message);
+      void queryClient.invalidateQueries({ queryKey: ["admin-settings", "media-types"] });
       setModalType(null);
       setEditingId(null);
       setName("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save media type.");
+      const message = err instanceof Error ? err.message : "Failed to save media type.";
+      setError(message);
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -232,9 +222,7 @@ const AdminSettings = () => {
     }
   };
 
-  const handleDeleteCategory = async (category: Category) => {
-    if (!window.confirm(`Are you sure you want to delete "${category.name}"?`)) return;
-
+  const deleteCategoryRequest = async (category: Category) => {
     setError("");
     setSuccess("");
     try {
@@ -250,16 +238,18 @@ const AdminSettings = () => {
 
       if (!response.ok) throw new Error(result.message || "Failed to delete category.");
 
-      setCategories((previous) => previous.filter((item) => item.id !== category.id));
-      setSuccess(result.message || "Category deleted successfully.");
+      const message = result.message || "Category deleted successfully.";
+      setSuccess(message);
+      toast.success(message);
+      void queryClient.invalidateQueries({ queryKey: ["admin-settings", "categories"] });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete category.");
+      const message = err instanceof Error ? err.message : "Failed to delete category.";
+      setError(message);
+      toast.error(message);
     }
   };
 
-  const handleDeleteMediaType = async (item: MediaType) => {
-    if (!window.confirm(`Are you sure you want to delete "${item.name}"?`)) return;
-
+  const deleteMediaTypeRequest = async (item: MediaType) => {
     setError("");
     setSuccess("");
     try {
@@ -275,11 +265,29 @@ const AdminSettings = () => {
 
       if (!response.ok) throw new Error(result.message || "Failed to delete media type.");
 
-      setMediaTypes((previous) => previous.filter((current) => current.id !== item.id));
-      setSuccess(result.message || "Media type deleted successfully.");
+      const message = result.message || "Media type deleted successfully.";
+      setSuccess(message);
+      toast.success(message);
+      void queryClient.invalidateQueries({ queryKey: ["admin-settings", "media-types"] });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete media type.");
+      const message = err instanceof Error ? err.message : "Failed to delete media type.";
+      setError(message);
+      toast.error(message);
     }
+  };
+
+  const handleDeleteCategory = (category: Category) =>
+    setItemToDelete({ type: "CATEGORY", item: category });
+
+  const handleDeleteMediaType = (item: MediaType) =>
+    setItemToDelete({ type: "MEDIA_TYPE", item });
+
+  const confirmDelete = async () => {
+    if (!itemToDelete) return;
+    const { type, item } = itemToDelete;
+    setItemToDelete(null);
+    if (type === "CATEGORY") await deleteCategoryRequest(item as Category);
+    else await deleteMediaTypeRequest(item as MediaType);
   };
 
   return (
@@ -298,13 +306,13 @@ const AdminSettings = () => {
           </p>
         </div>
 
-        {(error || success) && (
+        {(error || success || categoriesQuery.isError || mediaTypesQuery.isError) && (
           <div className={`mb-5 flex items-start gap-2 rounded-xl border px-4 py-3 text-sm ${
             error ? "border-red-200 bg-red-50 text-red-800" : "border-green-200 bg-green-50 text-green-800"
           }`}>
-            {error ? <AlertCircle size={18} className="mt-0.5 shrink-0" /> : <CheckCircle2 size={18} className="mt-0.5 shrink-0" />}
-            <p>{error || success}</p>
-            <button type="button" className="ml-auto" onClick={() => { setError(""); setSuccess(""); }} aria-label="Dismiss message">
+            {(error || categoriesQuery.isError || mediaTypesQuery.isError) ? <AlertCircle size={18} className="mt-0.5 shrink-0" /> : <CheckCircle2 size={18} className="mt-0.5 shrink-0" />}
+            <p>{error || success || (categoriesQuery.error instanceof Error ? categoriesQuery.error.message : mediaTypesQuery.error instanceof Error ? mediaTypesQuery.error.message : "")}</p>
+            <button type="button" className="cursor-pointer ml-auto" onClick={() => { setError(""); setSuccess(""); }} aria-label="Dismiss message">
               <X size={16} />
             </button>
           </div>
@@ -335,13 +343,13 @@ const AdminSettings = () => {
                     <p className="mt-1 text-xs text-gray-500">{categories.length} categories</p>
                   </div>
                 </div>
-                <button type="button" onClick={() => openAddModal("CATEGORY")} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-gray-900 px-3 py-2 text-xs font-medium text-white transition hover:bg-gray-800">
+                <button type="button" onClick={() => openAddModal("CATEGORY")} className="inline-flex shrink-0 items-center gap-1.5 cursor-pointer rounded-lg bg-gray-900 px-3 py-2 text-xs font-medium text-white transition hover:bg-gray-800">
                   <Plus size={15} /> Add
                 </button>
               </div>
               <div className="mt-4 flex gap-2">
                 <input type="text" value={searchCategory} onChange={(e) => setSearchCategory(e.target.value)} placeholder="Search categories..." className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900" />
-                <button type="button" onClick={() => void loadCategories()} disabled={loadingCategories} className="rounded-lg border border-gray-300 px-3 text-gray-600 hover:bg-gray-50 disabled:opacity-50" title="Refresh categories">
+                <button type="button" onClick={() => void categoriesQuery.refetch()} disabled={loadingCategories} className="rounded-lg border border-gray-300 px-3 text-gray-600 hover:bg-gray-50 disabled:opacity-50" title="Refresh categories">
                   {loadingCategories ? <LoaderCircle size={17} className="animate-spin" /> : <RefreshCw size={17} />}
                 </button>
               </div>
@@ -358,8 +366,8 @@ const AdminSettings = () => {
                     <p className="truncate text-sm font-medium text-gray-800">{category.name}</p>
                   </div>
                   <div className="flex shrink-0 gap-1">
-                    <button type="button" onClick={() => openEditCategory(category)} className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-900" title="Edit category"><Edit size={16} /></button>
-                    <button type="button" onClick={() => void handleDeleteCategory(category)} className="rounded-lg p-2 text-gray-400 transition hover:bg-red-50 hover:text-red-600" title="Delete category"><Trash2 size={16} /></button>
+                    <button type="button" onClick={() => openEditCategory(category)} className="rounded-lg p-2 text-gray-400 transition cursor-pointer hover:bg-gray-100 hover:text-gray-900" title="Edit category"><Edit size={16} /></button>
+                    <button type="button" onClick={() => void handleDeleteCategory(category)} className="rounded-lg p-2 text-gray-400 cursor-pointer transition hover:bg-red-50 hover:text-red-600" title="Delete category"><Trash2 size={16} /></button>
                   </div>
                 </div>
               ))}
@@ -376,13 +384,13 @@ const AdminSettings = () => {
                     <p className="mt-1 text-xs text-gray-500">{mediaTypes.length} media types</p>
                   </div>
                 </div>
-                <button type="button" onClick={() => openAddModal("MEDIA_TYPE")} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-gray-900 px-3 py-2 text-xs font-medium text-white transition hover:bg-gray-800">
+                <button type="button" onClick={() => openAddModal("MEDIA_TYPE")} className="inline-flex cursor-pointer shrink-0 items-center gap-1.5 rounded-lg bg-gray-900 px-3 py-2 text-xs font-medium text-white transition hover:bg-gray-800">
                   <Plus size={15} /> Add
                 </button>
               </div>
               <div className="mt-4 flex gap-2">
                 <input type="text" value={searchMediaType} onChange={(e) => setSearchMediaType(e.target.value)} placeholder="Search media types..." className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900" />
-                <button type="button" onClick={() => void loadMediaTypes()} disabled={loadingMediaTypes} className="rounded-lg border border-gray-300 px-3 text-gray-600 hover:bg-gray-50 disabled:opacity-50" title="Refresh media types">
+                <button type="button" onClick={() => void mediaTypesQuery.refetch()} disabled={loadingMediaTypes} className="rounded-lg border border-gray-300 px-3 text-gray-600 hover:bg-gray-50 disabled:opacity-50" title="Refresh media types">
                   {loadingMediaTypes ? <LoaderCircle size={17} className="animate-spin" /> : <RefreshCw size={17} />}
                 </button>
               </div>
@@ -399,8 +407,8 @@ const AdminSettings = () => {
                     <p className="truncate text-sm font-medium text-gray-800">{item.name}</p>
                   </div>
                   <div className="flex shrink-0 gap-1">
-                    <button type="button" onClick={() => openEditMediaType(item)} className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-900" title="Edit media type"><Edit size={16} /></button>
-                    <button type="button" onClick={() => void handleDeleteMediaType(item)} className="rounded-lg p-2 text-gray-400 transition hover:bg-red-50 hover:text-red-600" title="Delete media type"><Trash2 size={16} /></button>
+                    <button type="button" onClick={() => openEditMediaType(item)} className="rounded-lg p-2 text-gray-400 cursor-pointer transition hover:bg-gray-100 hover:text-gray-900" title="Edit media type"><Edit size={16} /></button>
+                    <button type="button" onClick={() => void handleDeleteMediaType(item)} className="rounded-lg p-2 text-gray-400 cursor-pointer transition hover:bg-red-50 hover:text-red-600" title="Delete media type"><Trash2 size={16} /></button>
                   </div>
                 </div>
               ))}
@@ -443,7 +451,7 @@ const AdminSettings = () => {
                   Changes will be saved to the database.
                 </p>
               </div>
-              <button type="button" onClick={closeModal} className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700" aria-label="Close modal"><X size={18} /></button>
+              <button type="button" onClick={closeModal} className="cursor-pointer rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700" aria-label="Close modal"><X size={18} /></button>
             </div>
             <form onSubmit={(event) => void handleSubmit(event)}>
               <div className="p-5">
@@ -453,14 +461,32 @@ const AdminSettings = () => {
                 <input id="setting-name" type="text" value={name} onChange={(e) => setName(e.target.value)} autoFocus required maxLength={100} placeholder={modalType === "CATEGORY" ? "e.g. Books & Magazines" : "e.g. Blu-ray"} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none transition focus:border-gray-900 focus:ring-1 focus:ring-gray-900" />
               </div>
               <div className="flex justify-end gap-3 border-t border-gray-100 p-5">
-                <button type="button" onClick={closeModal} disabled={saving} className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50">Cancel</button>
-                <button type="submit" disabled={!name.trim() || saving} className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50">
+                <button type="button" onClick={closeModal} disabled={saving} className="cursor-pointer rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50">Cancel</button>
+                <button type="submit" disabled={!name.trim() || saving} className="cursor-pointer inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50">
                   {saving && <LoaderCircle size={16} className="animate-spin" />}
                   {saving ? "Saving..." : editingId !== null ? "Save Changes" : "Add"}
                 </button>
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {itemToDelete && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <section role="alertdialog" aria-modal="true" aria-labelledby="delete-setting-title" className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-600">
+              <Trash2 size={22} />
+            </div>
+            <h2 id="delete-setting-title" className="mt-4 text-lg font-semibold text-gray-900">Delete {itemToDelete.type === "CATEGORY" ? "category" : "media type"}?</h2>
+            <p className="mt-2 text-sm leading-6 text-gray-600">
+              Are you sure you want to delete <strong>{itemToDelete.item.name}</strong>? This action cannot be undone.
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" onClick={() => setItemToDelete(null)} className="cursor-pointer rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
+              <button type="button" onClick={() => void confirmDelete()} className="cursor-pointer rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700">Delete</button>
+            </div>
+          </section>
         </div>
       )}
     </div>

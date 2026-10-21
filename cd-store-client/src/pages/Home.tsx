@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { getProducts } from "../services/productServices";
 import type { Product } from "../types/product";
 import ProductCard from "../components/ProductCard";
+import Footer from "../components/Footer";
 
 const banners = [
   {
@@ -509,35 +510,7 @@ const Home = () => {
       {/* =====================================================
           FOOTER
       ====================================================== */}
-      <footer className="border-t border-gray-200 bg-black px-6 py-12 text-white lg:px-8">
-
-        <div className="mx-auto flex max-w-7xl flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-
-          <div>
-            <h3 className="text-xl font-bold">
-              CDs <span className="text-pink-500">Atbp.</span>
-            </h3>
-
-            <p className="mt-2 text-sm text-gray-400">
-              CDs, vinyl, cassette tapes, VCDs, DVDs & more.
-            </p>
-          </div>
-
-          <Link
-            to="/products"
-            className="inline-flex items-center gap-2 font-semibold text-pink-500 hover:text-pink-400"
-          >
-            Shop Now
-            <ArrowRight size={17} />
-          </Link>
-
-        </div>
-
-        <div className="mx-auto mt-8 max-w-7xl border-t border-gray-800 pt-6 text-sm text-gray-500">
-          © {new Date().getFullYear()} CDs Atbp. All rights reserved.
-        </div>
-
-      </footer>
+      <Footer />
 
     </div>
   );

@@ -1,249 +1,163 @@
 import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
-import {
-
-  Edit,
-
-  Package,
-
-  Plus,
-
-  Search,
-
-  Trash2,
-
-} from "lucide-react";
-
+import { AlertTriangle, Edit, Package, Plus, Search, Trash2, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
-
-
-import {
-
-  deleteProduct,
-
-  getProducts,
-
-} from "../../services/productServices";
-
-
-
+import { deleteProduct, getProducts } from "../../services/productServices";
 import type { Product } from "../../types/product";
-
-
 
 const AdminProducts = () => {
 
   const navigate = useNavigate();
 
-
-
-  const [products, setProducts] = useState<Product[]>([]);
-
-  const [isLoading, setIsLoading] = useState(true);
-
-  const [error, setError] = useState("");
-
-
+  const queryClient = useQueryClient();
 
   const [search, setSearch] = useState("");
-
   const [mediaType, setMediaType] = useState("ALL");
-
-  const [mediaTypes, setMediaTypes] = useState<{ id: string; name: string }[]>([]);
-  const [isLoadingMediaTypes, setIsLoadingMediaTypes] = useState(true);
-
   const [stockFilter, setStockFilter] = useState("ALL");
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
 
+  const {
+    data: products = [],
+    isLoading,
+    error: productsError,
+    refetch: refetchProducts,
+  } = useQuery<Product[]>({
+    queryKey: ["admin-products"],
+    queryFn: async () => {
+      const firstPage = await getProducts({ page: 1, limit: 48 });
+      const allProducts = [...firstPage.data];
 
-
-  
-const loadProducts = async () => {
-  try {
-    setIsLoading(true);
-    setError("");
-
-    const firstPage = await getProducts({
-      page: 1,
-      limit: 48,
-    });
-
-    const allProducts = [...firstPage.data];
-
-    if (firstPage.pagination.totalPages > 1) {
-      const remainingPages = Array.from(
-        { length: firstPage.pagination.totalPages - 1 },
-        (_, index) => index + 2
-      );
-
-      const results = await Promise.all(
-        remainingPages.map((page) =>
-          getProducts({ page, limit: 48 })
-        )
-      );
-
-      results.forEach((result) => {
-        allProducts.push(...result.data);
-      });
-    }
-
-    setProducts(allProducts);
-  } catch (error) {
-    console.error(error);
-
-    setError(
-      error instanceof Error
-        ? error.message
-        : "Failed to load products."
-    );
-  } finally {
-    setIsLoading(false);
-  }
-};
-
-
-
-  useEffect(() => {
-
-    loadProducts();
-
-  }, []);
-
-  useEffect(() => {
-    const loadMediaTypes = async () => {
-      try {
-        setIsLoadingMediaTypes(true);
-        const apiUrl = import.meta.env.VITE_API_URL;
-
-        if (!apiUrl) {
-          throw new Error("API URL is not configured.");
-        }
-
-        const response = await fetch(`${apiUrl}/media-types`);
-
-        if (!response.ok) {
-          throw new Error("Failed to load media types.");
-        }
-
-        const result: unknown = await response.json();
-        const payload = result as
-          | { data?: { id: string; name: string }[] }
-          | { mediaTypes?: { id: string; name: string }[] }
-          | { id: string; name: string }[];
-
-        const list = Array.isArray(payload)
-          ? payload
-          : "data" in payload && Array.isArray(payload.data)
-            ? payload.data
-            : "mediaTypes" in payload && Array.isArray(payload.mediaTypes)
-              ? payload.mediaTypes
-              : [];
-
-        setMediaTypes(
-          list
-            .filter(
-              (item): item is { id: string; name: string } =>
-                Boolean(
-                  item &&
-                    typeof item.id === "string" &&
-                    typeof item.name === "string" &&
-                    item.name.trim(),
-                ),
-            )
-            .sort((a, b) => a.name.localeCompare(b.name)),
+      if (firstPage.pagination.totalPages > 1) {
+        const remainingPages = Array.from(
+          { length: firstPage.pagination.totalPages - 1 },
+          (_, index) => index + 2,
         );
-      } catch (error) {
-        console.error("Error loading media types:", error);
-        setError(
-          error instanceof Error
-            ? error.message
-            : "Failed to load media types.",
+
+        const results = await Promise.all(
+          remainingPages.map((page) => getProducts({ page, limit: 48 })),
         );
-      } finally {
-        setIsLoadingMediaTypes(false);
+
+        results.forEach((result) => allProducts.push(...result.data));
       }
-    };
 
-    void loadMediaTypes();
-  }, []);
+      return allProducts;
+    },
+  });
 
+  const {
+    data: mediaTypes = [],
+    isLoading: isLoadingMediaTypes,
+    error: mediaTypesError,
+  } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ["media-types"],
+    queryFn: async () => {
+      const apiUrl = import.meta.env.VITE_API_URL;
 
+      if (!apiUrl) {
+        throw new Error("API URL is not configured.");
+      }
 
-  // ==========================================
+      const response = await fetch(`${apiUrl}/media-types`);
 
-  // DELETE PRODUCT
+      if (!response.ok) {
+        throw new Error("Failed to load media types.");
+      }
 
-  // ==========================================
+      const result: unknown = await response.json();
+      const payload = result as
+        | { data?: { id: string; name: string }[] }
+        | { mediaTypes?: { id: string; name: string }[] }
+        | { id: string; name: string }[];
 
+      const list = Array.isArray(payload)
+        ? payload
+        : "data" in payload && Array.isArray(payload.data)
+          ? payload.data
+          : "mediaTypes" in payload && Array.isArray(payload.mediaTypes)
+            ? payload.mediaTypes
+            : [];
 
-
-  const handleDelete = async (product: Product) => {
-
-    const confirmed = window.confirm(
-
-      `Are you sure you want to delete "${product.name}"?`
-
-    );
-
-
-
-    if (!confirmed) return;
-
-
-
-    try {
-
-      await deleteProduct(product.id);
-
-
-
-      setProducts((currentProducts) =>
-
-        currentProducts.filter(
-
-          (item) => item.id !== product.id
-
+      return list
+        .filter(
+          (item): item is { id: string; name: string } =>
+            Boolean(
+              item &&
+                typeof item.id === "string" &&
+                typeof item.name === "string" &&
+                item.name.trim(),
+            ),
         )
+        .sort((a, b) => a.name.localeCompare(b.name));
+    },
+  });
 
+  const error =
+    productsError instanceof Error
+      ? productsError.message
+      : mediaTypesError instanceof Error
+        ? mediaTypesError.message
+        : "";
+
+  useEffect(() => {
+    if (productsError) {
+      toast.error(
+        productsError instanceof Error
+          ? productsError.message
+          : "Failed to load products.",
       );
-
-    } catch (error) {
-
-      console.error(error);
-
-
-
-      setError(
-
-        error instanceof Error
-
-          ? error.message
-
-          : "Failed to delete product."
-
-      );
-
     }
+  }, [productsError]);
 
+  useEffect(() => {
+    if (mediaTypesError) {
+      toast.error(
+        mediaTypesError instanceof Error
+          ? mediaTypesError.message
+          : "Failed to load media types.",
+      );
+    }
+  }, [mediaTypesError]);
+
+  const deleteProductMutation = useMutation({
+    mutationFn: (productId: string) => deleteProduct(productId),
+    onSuccess: async (_result, productId) => {
+      queryClient.setQueryData<Product[]>(["admin-products"], (current = []) =>
+        current.filter((product) => product.id !== productId),
+      );
+      await queryClient.invalidateQueries({ queryKey: ["admin-products"] });
+      toast.success("Product deleted successfully.");
+    },
+    onError: (mutationError) => {
+      const message =
+        mutationError instanceof Error
+          ? mutationError.message
+          : "Failed to delete product.";
+      toast.error(message);
+    },
+  });
+
+  // Delete product
+  const handleDelete = (product: Product) => {
+    setProductToDelete(product);
   };
 
+  const confirmDelete = () => {
+    if (!productToDelete) return;
 
+    deleteProductMutation.mutate(productToDelete.id, {
+      onSuccess: () => setProductToDelete(null),
+    });
+  };
 
-  // ==========================================
-
-  // FILTER PRODUCTS
-
-  // ==========================================
-
-
-
+  // Filter products
   const filteredProducts = useMemo(() => {
 
     return products.filter((product) => {
 
       const searchValue = search.toLowerCase().trim();
-
-
 
       const matchesSearch =
 
@@ -265,25 +179,17 @@ const loadProducts = async () => {
 
           .includes(searchValue);
 
-
-
       const matchesMediaType =
         mediaType === "ALL" ||
         product.media_type?.trim().toLowerCase() === mediaType.trim().toLowerCase();
 
-
-
       let matchesStock = true;
-
-
 
       if (stockFilter === "IN_STOCK") {
 
         matchesStock = product.stock > 0;
 
       }
-
-
 
       if (stockFilter === "LOW_STOCK") {
 
@@ -293,15 +199,11 @@ const loadProducts = async () => {
 
       }
 
-
-
       if (stockFilter === "OUT_OF_STOCK") {
 
         matchesStock = product.stock === 0;
 
       }
-
-
 
       return (
 
@@ -327,16 +229,7 @@ const loadProducts = async () => {
 
   ]);
 
-
-
-  // ==========================================
-
-  // LOADING
-
-  // ==========================================
-
-
-
+  // Loading state
   if (isLoading) {
 
     return (
@@ -348,8 +241,6 @@ const loadProducts = async () => {
           <div className="rounded-2xl bg-white p-10 text-center shadow-sm">
 
             <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-gray-900" />
-
-
 
             <p className="text-gray-600">
 
@@ -367,23 +258,12 @@ const loadProducts = async () => {
 
   }
 
-
-
-  // ==========================================
-
-  // PAGE
-
-  // ==========================================
-
-
-
+  // Page
   return (
 
     <main className="min-h-screen bg-gray-100 px-4 py-6 sm:px-6 lg:px-8">
 
       <div className="mx-auto max-w-7xl">
-
-
 
         {/* Header */}
 
@@ -397,15 +277,11 @@ const loadProducts = async () => {
 
             </p>
 
-
-
             <h1 className="mt-1 text-3xl font-bold text-gray-900">
 
               Products
 
             </h1>
-
-
 
             <p className="mt-2 text-gray-600">
 
@@ -414,8 +290,6 @@ const loadProducts = async () => {
             </p>
 
           </div>
-
-
 
           <button
 
@@ -427,7 +301,7 @@ const loadProducts = async () => {
 
             }
 
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-gray-800"
+            className="cursor-pointer inline-flex items-center justify-center gap-2 rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-gray-800"
 
           >
 
@@ -439,27 +313,27 @@ const loadProducts = async () => {
 
         </div>
 
-
-
         {/* Error */}
 
         {error && (
-
-          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-
-            {error}
-
+          <div
+            role="alert"
+            className="mb-6 flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <p>{error}</p>
+            <button
+              type="button"
+              onClick={() => void refetchProducts()}
+              className="cursor-pointer shrink-0 rounded-lg border border-red-200 px-3 py-2 font-medium transition hover:bg-red-100"
+            >
+              Retry loading products
+            </button>
           </div>
-
         )}
-
-
 
         {/* Stats */}
 
         <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-
-
 
           <div className="rounded-2xl bg-white p-5 shadow-sm">
 
@@ -469,8 +343,6 @@ const loadProducts = async () => {
 
             </p>
 
-
-
             <p className="mt-2 text-3xl font-bold text-gray-900">
 
               {products.length}
@@ -479,8 +351,6 @@ const loadProducts = async () => {
 
           </div>
 
-
-
           <div className="rounded-2xl bg-white p-5 shadow-sm">
 
             <p className="text-sm text-gray-500">
@@ -488,8 +358,6 @@ const loadProducts = async () => {
               In Stock
 
             </p>
-
-
 
             <p className="mt-2 text-3xl font-bold text-green-600">
 
@@ -507,8 +375,6 @@ const loadProducts = async () => {
 
           </div>
 
-
-
           <div className="rounded-2xl bg-white p-5 shadow-sm">
 
             <p className="text-sm text-gray-500">
@@ -516,8 +382,6 @@ const loadProducts = async () => {
               Low Stock
 
             </p>
-
-
 
             <p className="mt-2 text-3xl font-bold text-yellow-600">
 
@@ -539,8 +403,6 @@ const loadProducts = async () => {
 
           </div>
 
-
-
           <div className="rounded-2xl bg-white p-5 shadow-sm">
 
             <p className="text-sm text-gray-500">
@@ -548,8 +410,6 @@ const loadProducts = async () => {
               Out of Stock
 
             </p>
-
-
 
             <p className="mt-2 text-3xl font-bold text-red-600">
 
@@ -567,19 +427,13 @@ const loadProducts = async () => {
 
           </div>
 
-
-
         </div>
-
-
 
         {/* Filters */}
 
         <div className="mb-6 rounded-2xl bg-white p-4 shadow-sm">
 
           <div className="grid gap-4 lg:grid-cols-[1fr_180px_180px]">
-
-
 
             {/* Search */}
 
@@ -592,8 +446,6 @@ const loadProducts = async () => {
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
 
               />
-
-
 
               <input
 
@@ -615,8 +467,6 @@ const loadProducts = async () => {
 
             </div>
 
-
-
             {/* Media Type */}
 
             <select
@@ -631,8 +481,6 @@ const loadProducts = async () => {
                 All Media Types
 
               </option>
-
-
 
               {isLoadingMediaTypes ? (
                 <option value="" disabled>
@@ -651,8 +499,6 @@ const loadProducts = async () => {
               )}
 
             </select>
-
-
 
             {/* Stock */}
 
@@ -676,23 +522,17 @@ const loadProducts = async () => {
 
               </option>
 
-
-
               <option value="IN_STOCK">
 
                 In Stock
 
               </option>
 
-
-
               <option value="LOW_STOCK">
 
                 Low Stock
 
               </option>
-
-
 
               <option value="OUT_OF_STOCK">
 
@@ -702,25 +542,17 @@ const loadProducts = async () => {
 
             </select>
 
-
-
           </div>
 
         </div>
-
-
 
         {/* Product Table */}
 
         <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
 
-
-
           <div className="border-b border-gray-200 px-6 py-5">
 
             <div className="flex items-center justify-between">
-
-
 
               <div>
 
@@ -729,8 +561,6 @@ const loadProducts = async () => {
                   Product Inventory
 
                 </h2>
-
-
 
                 <p className="mt-1 text-sm text-gray-500">
 
@@ -748,8 +578,6 @@ const loadProducts = async () => {
 
               </div>
 
-
-
               <Package
 
                 size={22}
@@ -758,13 +586,9 @@ const loadProducts = async () => {
 
               />
 
-
-
             </div>
 
           </div>
-
-
 
           {/* Desktop table */}
 
@@ -782,15 +606,11 @@ const loadProducts = async () => {
 
                   </th>
 
-
-
                   <th className="px-6 py-4">
 
                     Type
 
                   </th>
-
-
 
                   <th className="px-6 py-4">
 
@@ -798,15 +618,11 @@ const loadProducts = async () => {
 
                   </th>
 
-
-
                   <th className="px-6 py-4">
 
                     Category
 
                   </th>
-
-
 
                   <th className="px-6 py-4">
 
@@ -814,15 +630,11 @@ const loadProducts = async () => {
 
                   </th>
 
-
-
                   <th className="px-6 py-4">
 
                     Stock
 
                   </th>
-
-
 
                   <th className="px-6 py-4 text-right">
 
@@ -834,11 +646,7 @@ const loadProducts = async () => {
 
               </thead>
 
-
-
               <tbody className="divide-y divide-gray-100">
-
-
 
                 {filteredProducts.map((product) => (
 
@@ -850,19 +658,13 @@ const loadProducts = async () => {
 
                   >
 
-
-
                     {/* Product */}
 
                     <td className="px-6 py-5">
 
                       <div className="flex items-center gap-4">
 
-
-
                         <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gray-100">
-
-
 
                           {product.image_url ? (
 
@@ -888,11 +690,7 @@ const loadProducts = async () => {
 
                           )}
 
-
-
                         </div>
-
-
 
                         <div className="min-w-0">
 
@@ -901,8 +699,6 @@ const loadProducts = async () => {
                             {product.name}
 
                           </p>
-
-
 
                           <p className="mt-1 max-w-xs truncate text-xs text-gray-500">
 
@@ -914,13 +710,9 @@ const loadProducts = async () => {
 
                         </div>
 
-
-
                       </div>
 
                     </td>
-
-
 
                     {/* Type */}
 
@@ -934,8 +726,6 @@ const loadProducts = async () => {
 
                     </td>
 
-
-
                     {/* Condition */}
 
                     <td className="px-6 py-5 text-sm text-gray-600">
@@ -943,8 +733,6 @@ const loadProducts = async () => {
                       {product.condition}
 
                     </td>
-
-
 
                     {/* Category */}
 
@@ -955,8 +743,6 @@ const loadProducts = async () => {
                         "Uncategorized"}
 
                     </td>
-
-
 
                     {/* Price */}
 
@@ -971,8 +757,6 @@ const loadProducts = async () => {
                       ).toLocaleString()}
 
                     </td>
-
-
 
                     {/* Stock */}
 
@@ -1006,15 +790,11 @@ const loadProducts = async () => {
 
                     </td>
 
-
-
                     {/* Actions */}
 
                     <td className="px-6 py-5">
 
                       <div className="flex justify-end gap-2">
-
-
 
                         <button
 
@@ -1030,7 +810,7 @@ const loadProducts = async () => {
 
                           }
 
-                          className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+                          className="cursor-pointer inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
 
                         >
 
@@ -1039,8 +819,6 @@ const loadProducts = async () => {
                           Edit
 
                         </button>
-
-
 
                         <button
 
@@ -1052,7 +830,7 @@ const loadProducts = async () => {
 
                           }
 
-                          className="inline-flex items-center justify-center rounded-lg border border-red-200 p-2 text-red-600 transition hover:bg-red-50"
+                          className="cursor-pointer inline-flex items-center justify-center rounded-lg border border-red-200 p-2 text-red-600 transition hover:bg-red-50"
 
                           aria-label={`Delete ${product.name}`}
 
@@ -1062,19 +840,13 @@ const loadProducts = async () => {
 
                         </button>
 
-
-
                       </div>
 
                     </td>
 
-
-
                   </tr>
 
                 ))}
-
-
 
               </tbody>
 
@@ -1082,13 +854,9 @@ const loadProducts = async () => {
 
           </div>
 
-
-
           {/* Mobile cards */}
 
           <div className="divide-y divide-gray-100 md:hidden">
-
-
 
             {filteredProducts.map((product) => (
 
@@ -1100,15 +868,9 @@ const loadProducts = async () => {
 
               >
 
-
-
                 <div className="flex gap-4">
 
-
-
                   <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gray-100">
-
-
 
                     {product.image_url ? (
 
@@ -1134,23 +896,15 @@ const loadProducts = async () => {
 
                     )}
 
-
-
                   </div>
 
-
-
                   <div className="min-w-0 flex-1">
-
-
 
                     <h3 className="font-semibold text-gray-900">
 
                       {product.name}
 
                     </h3>
-
-
 
                     <p className="mt-1 text-sm text-gray-500">
 
@@ -1159,8 +913,6 @@ const loadProducts = async () => {
                       {product.condition}
 
                     </p>
-
-
 
                     <p className="mt-2 font-bold text-gray-900">
 
@@ -1174,27 +926,17 @@ const loadProducts = async () => {
 
                     </p>
 
-
-
                     <p className="mt-1 text-sm text-gray-500">
 
                       Stock: {product.stock}
 
                     </p>
 
-
-
                   </div>
-
-
 
                 </div>
 
-
-
                 <div className="mt-4 flex gap-2">
-
-
 
                   <button
 
@@ -1210,7 +952,7 @@ const loadProducts = async () => {
 
                     }
 
-                    className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700"
+                    className="cursor-pointer flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700"
 
                   >
 
@@ -1219,8 +961,6 @@ const loadProducts = async () => {
                     Edit
 
                   </button>
-
-
 
                   <button
 
@@ -1232,7 +972,7 @@ const loadProducts = async () => {
 
                     }
 
-                    className="flex items-center justify-center rounded-lg border border-red-200 px-4 py-2 text-red-600"
+                    className="cursor-pointer flex items-center justify-center rounded-lg border border-red-200 px-4 py-2 text-red-600"
 
                   >
 
@@ -1240,29 +980,19 @@ const loadProducts = async () => {
 
                   </button>
 
-
-
                 </div>
-
-
 
               </div>
 
             ))}
 
-
-
           </div>
-
-
 
           {/* Empty state */}
 
           {filteredProducts.length === 0 && (
 
             <div className="p-12 text-center">
-
-
 
               <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-gray-100">
 
@@ -1276,15 +1006,11 @@ const loadProducts = async () => {
 
               </div>
 
-
-
               <h3 className="mt-4 font-semibold text-gray-900">
 
                 No products found
 
               </h3>
-
-
 
               <p className="mt-1 text-sm text-gray-500">
 
@@ -1292,16 +1018,69 @@ const loadProducts = async () => {
 
               </p>
 
-
-
             </div>
 
           )}
 
-
-
         </div>
       </div>
+
+      {productToDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !deleteProductMutation.isPending) {
+              setProductToDelete(null);
+            }
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-product-title"
+            className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
+          >
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-red-50 text-red-600">
+              <AlertTriangle size={28} aria-hidden="true" />
+            </div>
+            <h2 id="delete-product-title" className="mt-4 text-center text-xl font-bold text-gray-900">
+              Delete this product?
+            </h2>
+            <p className="mt-2 text-center text-sm leading-6 text-gray-600">
+              Are you sure you want to delete <span className="font-semibold text-gray-900">{productToDelete.name}</span>?
+              This action cannot be undone.
+            </p>
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                disabled={deleteProductMutation.isPending}
+                onClick={() => setProductToDelete(null)}
+                className="cursor-pointer rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deleteProductMutation.isPending}
+                onClick={confirmDelete}
+                className="cursor-pointer inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {deleteProductMutation.isPending ? "Deleting..." : "Delete product"}
+              </button>
+            </div>
+            <button
+              type="button"
+              aria-label="Close confirmation"
+              disabled={deleteProductMutation.isPending}
+              onClick={() => setProductToDelete(null)}
+              className="cursor-pointer absolute right-4 top-4 rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed"
+            >
+              <X size={18} />
+            </button>
+          </section>
+        </div>
+      )}
     </main>
   );
 };

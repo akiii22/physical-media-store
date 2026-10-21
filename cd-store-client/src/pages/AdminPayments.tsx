@@ -1,4 +1,7 @@
 import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { CheckCircle2 } from "lucide-react";
 
 import {
   getPendingPayments,
@@ -28,180 +31,127 @@ type PendingPayment = {
 };
 
 const AdminPayments = () => {
-  const [payments, setPayments] = useState<
-    PendingPayment[]
-  >([]);
-
-  const [isLoading, setIsLoading] = useState(true);
-
+  const queryClient = useQueryClient();
   const [error, setError] = useState("");
+  const [processingId, setProcessingId] = useState<string | null>(null);
 
-  const [processingId, setProcessingId] = useState<
-    string | null
-  >(null);
+  const {
+    data: payments = [],
+    isLoading,
+    isError,
+    error: queryError,
+    refetch,
+  } = useQuery<PendingPayment[], Error>({
+    queryKey: ["admin-pending-payments"],
+    queryFn: getPendingPayments,
+  });
 
+  useEffect(() => {
+    if (isError) {
+      toast.error(queryError?.message ?? "Failed to load pending payments.");
+    }
+  }, [isError, queryError]);
 
-  
-  // LOAD PENDING PAYMENTS
-  
-const loadPayments = async () => {
-  try {
-    setIsLoading(true);
+  const loadPayments = async () => {
     setError("");
-
-    const data = await getPendingPayments();
-
-    setPayments(data);
-  } catch (error) {
-    setError(
-      error instanceof Error
-        ? error.message
-        : "Failed to load pending payments."
-    );
-  } finally {
-    setIsLoading(false);
-  }
-};
-
-useEffect(() => {
-  let cancelled = false;
-
-  const fetchPayments = async () => {
     try {
-      setIsLoading(true);
-      setError("");
-
-      const data = await getPendingPayments();
-
-console.log("PENDING PAYMENTS:", data);
-
-      if (!cancelled) {
-        setPayments(data);
+      const result = await refetch();
+      if (result.isError) {
+        throw result.error ?? new Error("Failed to refresh pending payments.");
       }
-    } catch (error) {
-      if (!cancelled) {
-        setError(
-          error instanceof Error
-            ? error.message
-            : "Failed to load pending payments."
-        );
-      }
-    } finally {
-      if (!cancelled) {
-        setIsLoading(false);
-      }
+      toast.success("Pending payments refreshed.");
+    } catch (refreshError) {
+      const message =
+        refreshError instanceof Error
+          ? refreshError.message
+          : "Failed to refresh pending payments.";
+      setError(message);
+      toast.error(message);
     }
   };
 
-  fetchPayments();
-
-  return () => {
-    cancelled = true;
-  };
-}, []);
-
-  
-  // VERIFY PAYMENT
-
-
-  const handleVerify = async (
-    paymentId: string
-  ) => {
-
+  const handleVerify = async (paymentId: string) => {
     const confirmed = window.confirm(
       "Are you sure you want to verify this payment?"
     );
-
     if (!confirmed) return;
 
     try {
-
       setProcessingId(paymentId);
       setError("");
 
       await verifyPayment(paymentId);
 
-      // Remove verified payment from pending list
-      setPayments((currentPayments) =>
-        currentPayments.filter(
-          (payment) =>
-            payment.payment_id !== paymentId
-        )
+      queryClient.setQueryData<PendingPayment[]>(
+        ["admin-pending-payments"],
+        (currentPayments = []) =>
+          currentPayments.filter((payment) => payment.payment_id !== paymentId)
       );
 
-    } catch (error) {
-
-      setError(
-        error instanceof Error
-          ? error.message
-          : "Failed to verify payment."
-      );
-
+      toast.success("Payment verified successfully.");
+    } catch (verifyError) {
+      const message =
+        verifyError instanceof Error
+          ? verifyError.message
+          : "Failed to verify payment.";
+      setError(message);
+      toast.error(message);
     } finally {
-
       setProcessingId(null);
-
     }
   };
 
-
-  
-  // REJECT PAYMENT
-  
-
- const handleReject = async (
-  paymentId: string
-) => {
-  const confirmed = window.confirm(
-    "Are you sure you want to reject this payment?"
-  );
-
-  if (!confirmed) return;
-
-  const reason = window.prompt(
-    "Please provide a reason for rejecting this payment:"
-  );
-
-  // Cancelled by the admin
-  if (reason === null) return;
-
-  // Validate the rejection reason
-  const trimmedReason = reason.trim();
-
-  if (!trimmedReason) {
-    setError("Please provide a rejection reason.");
-    return;
-  }
-
-  if (trimmedReason.length > 1000) {
-    setError("The rejection reason must not exceed 1000 characters.");
-    return;
-  }
-
-  try {
-    setProcessingId(paymentId);
-    setError("");
-
-    await rejectPayment(paymentId, trimmedReason);
-
-    // Remove the rejected payment from the pending list
-    setPayments((currentPayments) =>
-      currentPayments.filter(
-        (payment) => payment.payment_id !== paymentId
-      )
+  const handleReject = async (paymentId: string) => {
+    const confirmed = window.confirm(
+      "Are you sure you want to reject this payment?"
     );
-  } catch (error) {
-    setError(
-      error instanceof Error
-        ? error.message
-        : "Failed to reject payment."
+    if (!confirmed) return;
+
+    const reason = window.prompt(
+      "Please provide a reason for rejecting this payment:"
     );
-  } finally {
-    setProcessingId(null);
-  }
-};
+    if (reason === null) return;
 
+    const trimmedReason = reason.trim();
 
+    if (!trimmedReason) {
+      const message = "Please provide a rejection reason.";
+      setError(message);
+      toast.error(message);
+      return;
+    }
+
+    if (trimmedReason.length > 1000) {
+      const message = "The rejection reason must not exceed 1000 characters.";
+      setError(message);
+      toast.error(message);
+      return;
+    }
+
+    try {
+      setProcessingId(paymentId);
+      setError("");
+
+      await rejectPayment(paymentId, trimmedReason);
+
+      queryClient.setQueryData<PendingPayment[]>(
+        ["admin-pending-payments"],
+        (currentPayments = []) =>
+          currentPayments.filter((payment) => payment.payment_id !== paymentId)
+      );
+
+      toast.success("Payment rejected.");
+    } catch (rejectError) {
+      const message =
+        rejectError instanceof Error
+          ? rejectError.message
+          : "Failed to reject payment.";
+      setError(message);
+      toast.error(message);
+    } finally {
+      setProcessingId(null);
+    }
+  };
 
   // LOADING
   
@@ -276,9 +226,14 @@ console.log("PENDING PAYMENTS:", data);
 
           <div className="rounded-2xl bg-white p-12 text-center shadow-sm">
 
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-2xl text-green-600">
-              ✓
-            </div>
+<div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-100 bg-emerald-50 shadow-sm">
+  <CheckCircle2
+    size={32}
+    strokeWidth={1.8}
+    className="text-emerald-600"
+    aria-hidden="true"
+  />
+</div>
 
             <h2 className="mt-5 text-xl font-bold text-gray-900">
               No Pending Payments

@@ -1,6 +1,4 @@
 import {
-  useCallback,
-  useEffect,
   useMemo,
   useState,
   type ChangeEvent,
@@ -20,8 +18,11 @@ import {
   CheckCircle2,
   LoaderCircle,
   Power,
+  AlertTriangle,
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 type TeamRole = "ADMIN" | "STAFF";
 
@@ -52,7 +53,6 @@ const emptyForm: TeamFormData = {
 
 const formatDate = (date: string | null) => {
   if (!date) return "Not available";
-
   return new Date(date).toLocaleDateString("en-PH", {
     month: "short",
     day: "numeric",
@@ -61,28 +61,26 @@ const formatDate = (date: string | null) => {
 };
 
 const AdminManagement = () => {
-  const [staff, setStaff] = useState<StaffMember[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [changingMemberId, setChangingMemberId] = useState<string | null>(null);
-
+  const queryClient = useQueryClient();
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<"ALL" | TeamRole>("ALL");
-
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState<TeamFormData>(emptyForm);
+  const [memberToChange, setMemberToChange] = useState<StaffMember | null>(null);
+  const [showCreatedModal, setShowCreatedModal] = useState(false);
 
-  const loadTeamMembers = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError("");
-
-      if (!API_URL) {
-        throw new Error("VITE_API_URL is not configured.");
-      }
+  const {
+    data: staff = [],
+    isLoading: loading,
+    refetch: loadTeamMembers,
+    isError,
+    error: queryError,
+  } = useQuery({
+    queryKey: ["admin-team-members"],
+    queryFn: async (): Promise<StaffMember[]> => {
+      if (!API_URL) throw new Error("VITE_API_URL is not configured.");
 
       const {
         data: { session },
@@ -90,86 +88,26 @@ const AdminManagement = () => {
       } = await supabase.auth.getSession();
 
       if (sessionError) throw sessionError;
-
       if (!session?.access_token) {
         throw new Error("Your session has expired. Please log in again.");
       }
 
       const response = await fetch(`${API_URL}/users/admin/team`, {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
+        headers: { Authorization: `Bearer ${session.access_token}` },
       });
-
       const result = await response.json();
 
       if (!response.ok) {
         throw new Error(result.message || "Failed to load team members.");
       }
 
-      setStaff(result.data ?? []);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load team members.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+      return result.data ?? [];
+    },
+  });
 
-  useEffect(() => {
-    void loadTeamMembers();
-  }, [loadTeamMembers]);
-
-  const filteredStaff = useMemo(() => {
-    const query = search.trim().toLowerCase();
-
-    return staff.filter((member) => {
-      const matchesSearch =
-        member.name.toLowerCase().includes(query) ||
-        member.email.toLowerCase().includes(query);
-      const matchesRole = roleFilter === "ALL" || member.role === roleFilter;
-
-      return matchesSearch && matchesRole;
-    });
-  }, [staff, search, roleFilter]);
-
-  const adminCount = staff.filter((member) => member.role === "ADMIN").length;
-  const staffCount = staff.filter((member) => member.role === "STAFF").length;
-
-  const handleChange = (
-    event: ChangeEvent<HTMLInputElement | HTMLSelectElement>,
-  ) => {
-    const { name, value } = event.target;
-    setFormData((previous) => ({ ...previous, [name]: value }));
-  };
-
-  const closeModal = () => {
-    if (submitting) return;
-    setShowModal(false);
-    setFormData(emptyForm);
-  };
-
-  const handleAddStaff = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError("");
-    setSuccess("");
-
-    const name = formData.name.trim();
-    const email = formData.email.trim().toLowerCase();
-
-    if (!name || !email || !formData.password) {
-      setError("Please complete all required fields.");
-      return;
-    }
-
-    if (formData.password.length < 8) {
-      setError("The password must contain at least 8 characters.");
-      return;
-    }
-
-    try {
-      setSubmitting(true);
+  const createMemberMutation = useMutation({
+    mutationFn: async (payload: TeamFormData & { name: string; email: string }) => {
+      if (!API_URL) throw new Error("VITE_API_URL is not configured.");
 
       const {
         data: { session },
@@ -177,7 +115,6 @@ const AdminManagement = () => {
       } = await supabase.auth.getSession();
 
       if (sessionError) throw sessionError;
-
       if (!session?.access_token) {
         throw new Error("Your session has expired. Please log in again.");
       }
@@ -188,91 +125,135 @@ const AdminManagement = () => {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({
-          name,
-          email,
-          password: formData.password,
-          role: formData.role,
-        }),
+        body: JSON.stringify(payload),
       });
-
       const result = await response.json();
 
       if (!response.ok) {
         throw new Error(result.message || "Failed to create the team account.");
       }
 
+      return result;
+    },
+    onSuccess: async (result) => {
       setSuccess(result.message || "Team account created successfully.");
       setFormData(emptyForm);
       setShowModal(false);
-      await loadTeamMembers();
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "An unexpected error occurred.",
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  };
+      setShowCreatedModal(true);
+      toast.success(result.message || "Team account created successfully.");
+      await queryClient.invalidateQueries({ queryKey: ["admin-team-members"] });
+    },
+    onError: (err: Error) => {
+      setError(err.message || "Failed to create the team account.");
+      toast.error(err.message || "Failed to create the team account.");
+    },
+  });
 
-  const handleToggleStatus = async (member: StaffMember) => {
-    const nextIsActive = !member.is_active;
-    const action = nextIsActive ? "reactivate" : "deactivate";
+  const statusMutation = useMutation({
+    mutationFn: async ({ member, isActive }: { member: StaffMember; isActive: boolean }) => {
+      if (!API_URL) throw new Error("VITE_API_URL is not configured.");
 
-    const confirmed = window.confirm(
-      `Are you sure you want to ${action} ${member.email}?`,
-    );
-    if (!confirmed) return;
-
-    setError("");
-    setSuccess("");
-    setChangingMemberId(member.id);
-
-    try {
       const {
         data: { session },
         error: sessionError,
       } = await supabase.auth.getSession();
 
       if (sessionError) throw sessionError;
-
       if (!session?.access_token) {
         throw new Error("Your session has expired. Please log in again.");
       }
 
-      const response = await fetch(
-        `${API_URL}/users/admin/team/${member.id}/status`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({ is_active: nextIsActive }),
+      const response = await fetch(`${API_URL}/users/admin/team/${member.id}/status`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
         },
-      );
-
+        body: JSON.stringify({ is_active: isActive }),
+      });
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.message || `Failed to ${action} team member.`);
+        throw new Error(result.message || `Failed to ${isActive ? "reactivate" : "deactivate"} team member.`);
       }
 
-      setSuccess(
-        result.message ||
-          `Team member ${nextIsActive ? "reactivated" : "deactivated"} successfully.`,
-      );
-      await loadTeamMembers();
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to update team member status.",
-      );
-    } finally {
-      setChangingMemberId(null);
-    }
+      return { result, isActive };
+    },
+    onSuccess: async ({ result, isActive }) => {
+      const message = result.message || `Team member ${isActive ? "reactivated" : "deactivated"} successfully.`;
+      setSuccess(message);
+      setMemberToChange(null);
+      toast.success(message);
+      await queryClient.invalidateQueries({ queryKey: ["admin-team-members"] });
+    },
+    onError: (err: Error) => {
+      setError(err.message || "Failed to update team member status.");
+      toast.error(err.message || "Failed to update team member status.");
+    },
+  });
+
+  const handleChange = (
+    event: ChangeEvent<HTMLInputElement | HTMLSelectElement>,
+  ) => {
+    const { name, value } = event.target;
+    setFormData((previous) => ({ ...previous, [name]: value }));
   };
+
+  const closeModal = () => {
+    if (createMemberMutation.isPending) return;
+    setShowModal(false);
+    setFormData(emptyForm);
+  };
+
+  const requestStatusChange = (member: StaffMember) => {
+    setMemberToChange(member);
+  };
+
+  const handleAddStaff = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError("");
+    setSuccess("");
+
+    const name = formData.name.trim();
+    const email = formData.email.trim().toLowerCase();
+
+    if (!name || !email || !formData.password) {
+      setError("Please complete all required fields.");
+      toast.error("Please complete all required fields.");
+      return;
+    }
+
+    if (formData.password.length < 8) {
+      setError("The password must contain at least 8 characters.");
+      toast.error("The password must contain at least 8 characters.");
+      return;
+    }
+
+    createMemberMutation.mutate({ ...formData, name, email });
+  };
+
+  const handleToggleStatus = (member: StaffMember) => {
+    statusMutation.mutate({ member, isActive: !member.is_active });
+  };
+
+  const submitting = createMemberMutation.isPending;
+  const changingMemberId = statusMutation.isPending
+    ? statusMutation.variables?.member.id ?? null
+    : null;
+
+  const filteredStaff = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return staff.filter((member) => {
+      const matchesSearch =
+        member.name.toLowerCase().includes(query) ||
+        member.email.toLowerCase().includes(query);
+      const matchesRole = roleFilter === "ALL" || member.role === roleFilter;
+      return matchesSearch && matchesRole;
+    });
+  }, [staff, search, roleFilter]);
+
+  const adminCount = staff.filter((member) => member.role === "ADMIN").length;
+  const staffCount = staff.filter((member) => member.role === "STAFF").length;
 
   return (
     <div className="min-h-screen bg-gray-100 p-4 sm:p-6 lg:p-8">
@@ -288,7 +269,6 @@ const AdminManagement = () => {
               Manage administrator and staff accounts.
             </p>
           </div>
-
           <button
             type="button"
             onClick={() => {
@@ -296,7 +276,7 @@ const AdminManagement = () => {
               setSuccess("");
               setShowModal(true);
             }}
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800"
+            className="cursor-pointer inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800"
           >
             <Plus size={18} />
             Add Team Member
@@ -304,13 +284,13 @@ const AdminManagement = () => {
         </div>
 
         {/* Feedback */}
-        {error && (
+        {(error || isError) && (
           <div
             role="alert"
             className="mb-5 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
           >
             <AlertCircle size={19} className="mt-0.5 shrink-0" />
-            <p>{error}</p>
+            <p>{error || (queryError instanceof Error ? queryError.message : "Unable to load team members. Try refreshing.")}</p>
           </div>
         )}
 
@@ -362,7 +342,6 @@ const AdminManagement = () => {
                 className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
               />
             </div>
-
             <select
               value={roleFilter}
               onChange={(event) =>
@@ -375,12 +354,11 @@ const AdminManagement = () => {
               <option value="ADMIN">Admin</option>
               <option value="STAFF">Staff</option>
             </select>
-
             <button
               type="button"
               onClick={() => void loadTeamMembers()}
               disabled={loading || changingMemberId !== null}
-              className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+              className="cursor-pointer inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
             >
               <RefreshCw
                 size={16}
@@ -414,7 +392,6 @@ const AdminManagement = () => {
                   </th>
                 </tr>
               </thead>
-
               <tbody className="divide-y divide-gray-100">
                 {loading ? (
                   <tr>
@@ -459,25 +436,21 @@ const AdminManagement = () => {
                           </div>
                         </div>
                       </td>
-
                       <td className="px-6 py-4">
                         <RoleBadge role={member.role} />
                       </td>
-
                       <td className="px-6 py-4">
                         <StatusBadge isActive={member.is_active} />
                       </td>
-
                       <td className="px-6 py-4 text-sm text-gray-500">
                         {formatDate(member.createdAt)}
                       </td>
-
                       <td className="px-6 py-4">
                         <StatusActionButton
                           member={member}
                           busy={changingMemberId === member.id}
                           disabled={changingMemberId !== null}
-                          onClick={() => void handleToggleStatus(member)}
+                          onClick={() => requestStatusChange(member)}
                         />
                       </td>
                     </tr>
@@ -532,7 +505,7 @@ const AdminManagement = () => {
                       member={member}
                       busy={changingMemberId === member.id}
                       disabled={changingMemberId !== null}
-                      onClick={() => void handleToggleStatus(member)}
+                      onClick={() => requestStatusChange(member)}
                       fullWidth
                     />
                   </div>
@@ -569,12 +542,11 @@ const AdminManagement = () => {
                 onClick={closeModal}
                 disabled={submitting}
                 aria-label="Close dialog"
-                className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
+                className="cursor-pointer rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
               >
                 <X size={18} />
               </button>
             </div>
-
             <form onSubmit={handleAddStaff}>
               <div className="space-y-4 p-5">
                 <FormField label="Full Name">
@@ -590,7 +562,6 @@ const AdminManagement = () => {
                     className={inputClass}
                   />
                 </FormField>
-
                 <FormField label="Email Address">
                   <input
                     type="email"
@@ -604,7 +575,6 @@ const AdminManagement = () => {
                     className={inputClass}
                   />
                 </FormField>
-
                 <FormField label="Temporary Password">
                   <input
                     type="password"
@@ -622,7 +592,6 @@ const AdminManagement = () => {
                     own password.
                   </p>
                 </FormField>
-
                 <FormField label="Role">
                   <select
                     name="role"
@@ -634,27 +603,25 @@ const AdminManagement = () => {
                     <option value="ADMIN">Administrator</option>
                   </select>
                 </FormField>
-
                 <div className="rounded-lg bg-blue-50 px-3 py-2.5 text-xs leading-5 text-blue-700">
                   This creates an actual Supabase Auth account and assigns its
                   application role. Only create accounts for authorized team
                   members.
                 </div>
               </div>
-
               <div className="flex justify-end gap-3 border-t border-gray-100 p-5">
                 <button
                   type="button"
                   onClick={closeModal}
                   disabled={submitting}
-                  className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  className="cursor-pointer rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="cursor-pointer inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {submitting && (
                     <LoaderCircle size={16} className="animate-spin" />
@@ -664,6 +631,55 @@ const AdminManagement = () => {
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {memberToChange && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+          onClick={(event) => {
+            if (event.target === event.currentTarget && changingMemberId === null) {
+              setMemberToChange(null);
+            }
+          }}
+        >
+          <section role="alertdialog" aria-modal="true" aria-labelledby="status-confirm-title" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 text-amber-600">
+              <AlertTriangle size={24} />
+            </div>
+            <h2 id="status-confirm-title" className="mt-4 text-lg font-semibold text-gray-900">
+              {memberToChange.is_active ? "Deactivate account?" : "Reactivate account?"}
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-gray-600">
+              {memberToChange.is_active
+                ? `This will prevent ${memberToChange.email} from using their account until it is reactivated.`
+                : `This will restore access for ${memberToChange.email}.`}
+            </p>
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button type="button" onClick={() => setMemberToChange(null)} disabled={changingMemberId !== null} className="cursor-pointer rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50">
+                Cancel
+              </button>
+              <button type="button" onClick={() => void handleToggleStatus(memberToChange)} disabled={changingMemberId !== null} className={`cursor-pointer inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-white transition disabled:cursor-not-allowed disabled:opacity-60 ${memberToChange.is_active ? "bg-red-600 hover:bg-red-700" : "bg-green-600 hover:bg-green-700"}`}>
+                {changingMemberId === memberToChange.id && <LoaderCircle size={16} className="animate-spin" />}
+                {changingMemberId === memberToChange.id ? "Updating..." : memberToChange.is_active ? "Deactivate Account" : "Reactivate Account"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {showCreatedModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <section role="dialog" aria-modal="true" aria-labelledby="created-modal-title" className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-2xl">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-green-50 text-green-600">
+              <CheckCircle2 size={30} />
+            </div>
+            <h2 id="created-modal-title" className="mt-4 text-xl font-semibold text-gray-900">Team member created</h2>
+            <p className="mt-2 text-sm leading-6 text-gray-600">The account has been created successfully and is now listed in team management.</p>
+            <button type="button" onClick={() => setShowCreatedModal(false)} className="mt-6 w-full cursor-pointer rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800">
+              Continue
+            </button>
+          </section>
         </div>
       )}
     </div>
@@ -744,16 +760,16 @@ function StatusActionButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`${
+      className={`cursor-pointer ${
         fullWidth ? "mt-4 w-full" : ""
-      } inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
+      } cursor-pointer inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
         member.is_active
           ? "border-red-200 text-red-700 hover:bg-red-50"
           : "border-green-200 text-green-700 hover:bg-green-50"
       }`}
     >
       {busy ? (
-        <LoaderCircle size={16} className="animate-spin" />
+        <LoaderCircle size={16} className="cursor-pointer animate-spin" />
       ) : (
         <Power size={16} />
       )}

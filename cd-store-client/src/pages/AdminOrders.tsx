@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   Archive,
   ArrowRight,
@@ -146,13 +148,11 @@ const paymentClass = (status: string) => {
 };
 
 const AdminOrders = () => {
-  const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] =
     useState<Order | null>(null);
 
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const queryClient = useQueryClient();
 
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -185,15 +185,15 @@ const [archivedOrders, setArchivedOrders] = useState<Order[]>([]);
 const [archivedLoading, setArchivedLoading] = useState(false);
 const [restoringId, setRestoringId] = useState<string | null>(null);
 
-  const loadOrders = async (refresh = false) => {
-    try {
-      if (refresh) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
-      setError("");
-
+  const {
+    data: queriedOrders = [],
+    isLoading: loading,
+    isFetching: refreshing,
+    error: ordersQueryError,
+    refetch: refetchOrders,
+  } = useQuery<Order[]>({
+    queryKey: ["admin-orders"],
+    queryFn: async () => {
       const {
         data: { session },
       } = await supabase.auth.getSession();
@@ -202,40 +202,62 @@ const [restoringId, setRestoringId] = useState<string | null>(null);
         throw new Error("Admin session not found.");
       }
 
-      const response = await fetch(
-        `${API_URL}/orders/admin/all`,
-        {
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
-        }
-      );
+      const response = await fetch(`${API_URL}/orders/admin/all`, {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
 
-      const data = await response.json();
+      const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(
-          data.message || "Failed to retrieve orders."
-        );
+        throw new Error(result.message || "Failed to retrieve orders.");
       }
 
-      setOrders(data.data);
-    } catch (error) {
-      setError(
-        error instanceof Error
-          ? error.message
-          : "Failed to retrieve orders."
-      );
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+      return (result.data ?? []) as Order[];
+    },
+  });
+
+  // TanStack Query is the single source of truth for active orders.
+  const orders = queriedOrders;
+
+  // Update the query cache directly instead of copying query data into local state.
+  const updateOrders = (
+    updater: (previous: Order[]) => Order[]
+  ) => {
+    queryClient.setQueryData<Order[]>(
+      ["admin-orders"],
+      (previous) => updater(previous ?? [])
+    );
   };
 
   useEffect(() => {
-    loadOrders();
-  }, []);
+    if (!ordersQueryError) return;
 
+    const message = ordersQueryError instanceof Error
+      ? ordersQueryError.message
+      : "Failed to retrieve orders.";
+
+    toast.error(message);
+  }, [ordersQueryError]);
+
+  const loadOrders = async (refresh = false) => {
+    setError("");
+    const result = await refetchOrders();
+
+    if (result.isError) {
+      const message = result.error instanceof Error
+        ? result.error.message
+        : "Failed to retrieve orders.";
+      setError(message);
+      toast.error(message);
+      return;
+    }
+
+    if (refresh) {
+      toast.success("Orders refreshed successfully.");
+    }
+  };
 
   
 const loadArchivedOrders = async () => {
@@ -271,11 +293,11 @@ const loadArchivedOrders = async () => {
     setArchivedOrders(result.data ?? []);
     setCurrentPage(1);
   } catch (error) {
-    setError(
-      error instanceof Error
-        ? error.message
-        : "Failed to retrieve archived orders."
-    );
+    const message = error instanceof Error
+      ? error.message
+      : "Failed to retrieve archived orders.";
+    setError(message);
+    toast.error(message);
   } finally {
     setArchivedLoading(false);
   }
@@ -323,16 +345,15 @@ const handleRestoreOrder = async (order: Order) => {
       previous.filter((item) => item.id !== order.id)
     );
 
-    setOrders((previous) => [
-      order,
-      ...previous,
-    ]);
+    updateOrders((previous) => [order, ...previous]);
+    await queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
+    toast.success("Order restored successfully.");
   } catch (error) {
-    setError(
-      error instanceof Error
-        ? error.message
-        : "Failed to restore order."
-    );
+    const message = error instanceof Error
+      ? error.message
+      : "Failed to restore order.";
+    setError(message);
+    toast.error(message);
   } finally {
     setRestoringId(null);
   }
@@ -434,7 +455,7 @@ const endOrder = Math.min(
         newStatus
       );
 
-      setOrders((previous) =>
+      updateOrders((previous) =>
         previous.map((item) =>
           item.id === order.id
             ? { ...item, status: newStatus }
@@ -453,12 +474,14 @@ const endOrder = Math.min(
         delete updated[order.id];
         return updated;
       });
+      await queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
+      toast.success("Order status updated successfully.");
     } catch (error) {
-      setError(
-        error instanceof Error
-          ? error.message
-          : "Failed to update order status."
-      );
+      const message = error instanceof Error
+        ? error.message
+        : "Failed to update order status.";
+      setError(message);
+      toast.error(message);
     } finally {
       setBusyId(null);
     }
@@ -473,6 +496,7 @@ const endOrder = Math.min(
 
     if (!Number.isFinite(value) || value < 0) {
       setError("Delivery fee must be a valid amount.");
+      toast.error("Delivery fee must be a valid amount.");
       return;
     }
 
@@ -491,7 +515,7 @@ const endOrder = Math.min(
         updated_at: updated.updated_at,
       };
 
-      setOrders((previous) =>
+      updateOrders((previous) =>
         previous.map((item) =>
           item.id === order.id
             ? { ...item, ...patch }
@@ -510,12 +534,14 @@ const endOrder = Math.min(
         delete updatedFees[order.id];
         return updatedFees;
       });
+      await queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
+      toast.success("Delivery fee saved successfully.");
     } catch (error) {
-      setError(
-        error instanceof Error
-          ? error.message
-          : "Failed to update delivery fee."
-      );
+      const message = error instanceof Error
+        ? error.message
+        : "Failed to update delivery fee.";
+      setError(message);
+      toast.error(message);
     } finally {
       setBusyId(null);
     }
@@ -575,7 +601,7 @@ const endOrder = Math.min(
         newStatus = "DELIVERED";
       }
 
-      setOrders((previous) =>
+      updateOrders((previous) =>
         previous.map((item) =>
           item.id === order.id
             ? {
@@ -602,12 +628,14 @@ const endOrder = Math.min(
         delete updated[order.id];
         return updated;
       });
+      await queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
+      toast.success("Shipment details updated successfully.");
     } catch (error) {
-      setError(
-        error instanceof Error
-          ? error.message
-          : "Failed to update shipment."
-      );
+      const message = error instanceof Error
+        ? error.message
+        : "Failed to update shipment.";
+      setError(message);
+      toast.error(message);
     } finally {
       setBusyId(null);
     }
@@ -622,6 +650,7 @@ const endOrder = Math.min(
 
   if (!eligibleStatuses.includes(order.status)) {
     setError("This order cannot be archived.");
+    toast.error("This order cannot be archived.");
     return;
   }
 
@@ -630,9 +659,9 @@ const endOrder = Math.min(
   );
 
   if (hasPaidPayment || order.shipments?.length > 0) {
-    setError(
-      "Orders with completed payments or shipment records cannot be archived."
-    );
+    const message = "Orders with completed payments or shipment records cannot be archived.";
+    setError(message);
+    toast.error(message);
     return;
   }
 
@@ -672,19 +701,22 @@ const endOrder = Math.min(
       throw new Error(result.message || "Failed to archive order.");
     }
 
-    setOrders((previous) =>
+    updateOrders((previous) =>
       previous.filter((item) => item.id !== order.id)
     );
 
     setSelectedOrder((previous) =>
       previous?.id === order.id ? null : previous
     );
+    await queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
+    await queryClient.invalidateQueries({ queryKey: ["admin-archived-orders"] });
+    toast.success("Order archived successfully.");
   } catch (error) {
-    setError(
-      error instanceof Error
-        ? error.message
-        : "Failed to archive order."
-    );
+    const message = error instanceof Error
+      ? error.message
+      : "Failed to archive order.";
+    setError(message);
+    toast.error(message);
   } finally {
     setArchivingId(null);
   }

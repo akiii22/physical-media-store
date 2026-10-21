@@ -29,6 +29,12 @@ import AdminSales from "./pages/admin/AdminSales";
 import AdminEmailTemplate from "./pages/admin/AdminEmailTemplate";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
+import VinylRecordGrading from "./pages/policies/VinylRecordGrading";
+import PrivacyPolicy from "./pages/policies/PrivacyPolicy";
+import ShippingPolicy from "./pages/policies/ShippingPolicy";
+import ReturnRefundPolicy from "./pages/policies/ReturnRefundPolicy";
+import TermsAndConditions from "./pages/policies/TermsAndConditions";
+import FAQs from "./pages/policies/FAQs";
 
 const App = () => {
   const location = useLocation();
@@ -62,6 +68,40 @@ const App = () => {
           path="/order-confirmation/:orderId"
           element={<OrderConfirmation />}
         />
+
+        {/* ================================================
+    POLICY / INFORMATION ROUTES
+================================================ */}
+
+<Route
+  path="/vinyl-record-grading"
+  element={<VinylRecordGrading />}
+/>
+
+<Route
+  path="/privacy-policy"
+  element={<PrivacyPolicy />}
+/>
+
+<Route
+  path="/shipping-policy"
+  element={<ShippingPolicy />}
+/>
+
+<Route
+  path="/return-and-refund-policy"
+  element={<ReturnRefundPolicy />}
+/>
+
+<Route
+  path="/terms-and-conditions"
+  element={<TermsAndConditions />}
+/>
+
+<Route
+  path="/faqs"
+  element={<FAQs />}
+/>
 
         {/* ================================================
             CUSTOMER PROTECTED ROUTES
