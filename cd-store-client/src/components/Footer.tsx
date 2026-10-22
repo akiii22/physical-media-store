@@ -37,7 +37,7 @@ const Footer = () => {
           </p>
 
           <a
-            href="https://www.facebook.com/"
+            href="hhttps://www.facebook.com/share/18r2aHcTDi/"
             target="_blank"
             rel="noreferrer"
             aria-label="Facebook"
