@@ -41,7 +41,7 @@ const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const { user, role, logout } = useAuth();
-  const { getCartItemCount } = useCart();
+  const { getCartItemCount, clearCart } = useCart();
   const navigate = useNavigate();
 
   const cartCount = getCartItemCount();
@@ -53,6 +53,7 @@ const Navbar = () => {
 
     try {
       await logout();
+      clearCart()
       navigate("/");
     } catch (error) {
       console.error("Logout failed:", error);

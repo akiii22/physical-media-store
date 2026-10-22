@@ -80,6 +80,8 @@ const loadCart = (): CartItem[] => {
 export const CartProvider = ({ children }: CartProviderProps) => {
   const [items, setItems] = useState<CartItem[]>(loadCart);
 
+  const hasInitialized = useRef(false);
+
   // Keep the latest cart available for synchronous stock validation.
   const itemsRef = useRef<CartItem[]>(items);
 
@@ -89,13 +91,22 @@ export const CartProvider = ({ children }: CartProviderProps) => {
   };
 
   // Persist cart changes.
-  useEffect(() => {
-    try {
+useEffect(() => {
+  if (!hasInitialized.current) {
+    hasInitialized.current = true;
+    return;
+  }
+
+  try {
+    if (items.length === 0) {
+      localStorage.removeItem("cart");
+    } else {
       localStorage.setItem("cart", JSON.stringify(items));
-    } catch (error) {
-      console.error("Failed to save cart:", error);
     }
-  }, [items]);
+  } catch (error) {
+    console.error("Failed to save cart:", error);
+  }
+}, [items]);
 
   const addToCart = (product: Product): AddToCartResult => {
     if (product.stock <= 0) {
