@@ -1,5 +1,5 @@
 import type { PaymentMethod } from "../../services/orderServices";
-import { CreditCard, Check } from "lucide-react";
+import { Check } from "lucide-react";
 
 type PaymentMethodProps = {
   value: PaymentMethod;
@@ -28,17 +28,6 @@ const PaymentMethodComponent = ({
       icon: (
         <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-green-50 text-sm font-bold text-green-600">
           M
-        </div>
-      ),
-    },
-    {
-      value: "CARD" as const,
-      title: "Credit / Debit Card",
-      description:
-        "Card payment will be handled by the payment provider.",
-      icon: (
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gray-100 text-gray-700">
-          <CreditCard size={24} />
         </div>
       ),
     },

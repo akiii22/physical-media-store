@@ -4,7 +4,7 @@ const PrivacyPolicy = () => {
   return (
     <PolicyLayout
       title="Privacy Policy"
-      intro="At CDSatBP, we respect your privacy and are committed to protecting your personal information."
+      intro="At CDSatbp, we respect your privacy and are committed to protecting your personal information."
       sections={[
         {
           heading: "Information We Collect",
