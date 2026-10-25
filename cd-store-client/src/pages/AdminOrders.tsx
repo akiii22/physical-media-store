@@ -1571,16 +1571,7 @@ const endOrder = Math.min(
                             </span>
                           </div>
 
-                          {payment.proof_url && (
-                            <a
-                              href={payment.proof_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="mt-3 inline-block text-xs font-semibold text-slate-900 hover:text-slate-700 underline underline-offset-2"
-                            >
-                              View Payment Proof →
-                            </a>
-                          )}
+
                         </div>
                       ))
                     ) : (

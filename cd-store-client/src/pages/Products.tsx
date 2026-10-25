@@ -14,6 +14,7 @@ import {
   useNewReleases,
   useProducts,
 } from "../hooks/useProducts";
+import AnnouncementCarousel from "../components/AnnouncementCarousel";
 
 const PAGE_SIZE = 12;
 
@@ -165,24 +166,23 @@ const Products = () => {
   }
 
   return (
+    <>
+    <AnnouncementCarousel />
     <main className="min-h-screen bg-gray-50 px-4 py-10 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
         {/* Hero */}
-        <header className="mb-10">
-          <p className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-gray-500">
-            <Sparkles size={15} />
-            Physical Media Store
-          </p>
 
-          <h1 className="text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl lg:text-5xl">
-            Find something worth keeping.
-          </h1>
+{/* Hero */}
+<header className="mb-10">
+  <h1 className="text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl lg:text-5xl">
+    Find something worth keeping.
+  </h1>
 
-          <p className="mt-4 max-w-2xl text-base leading-7 text-gray-600">
-            Explore our collection of CDs, vinyl records, cassettes,
-            VCDs, DVDs, and other physical media.
-          </p>
-        </header>
+  <p className="mt-4 max-w-2xl text-base leading-7 text-gray-600">
+    Explore your favorites, discover new releases, and find CDs, vinyl
+    records, cassettes, VCDs, DVDs, and more.
+  </p>
+</header>
 
         {/* Search and filters */}
         <section className="mb-12 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
@@ -432,6 +432,7 @@ const Products = () => {
         </section>
       </div>
     </main>
+    </>
   );
 };
 

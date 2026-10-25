@@ -528,17 +528,17 @@ const MyOrders = () => {
                             {formatStatus(shipment.status)}
                           </span>
 
-                          {shipment.tracking_url && (
-                            <a
-                              href={shipment.tracking_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center justify-center gap-1 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-700"
-                            >
-                              Track Package
-                              <ArrowRight className="h-4 w-4" />
-                            </a>
-                          )}
+                          
+<div className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm text-gray-600">
+  <div className="flex items-center gap-2">
+    <Package className="h-4 w-4 text-gray-500" />
+    <span className="font-medium">Shipment information</span>
+  </div>
+  <p className="mt-1 text-xs text-gray-500">
+    Your order status and tracking details will be updated here.
+  </p>
+</div>
+
                         </div>
                       </div>
                     </div>

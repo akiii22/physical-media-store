@@ -10,7 +10,8 @@ import {
   LogOut,
   X,
   Mail,
-ChartNoAxesCombined, 
+ChartNoAxesCombined,
+Megaphone, 
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
@@ -63,6 +64,11 @@ const AdminSidebar = ({
       path: "/admin/admins",
       icon: ShieldCheck,
     },
+    {
+  label: "Announcements",
+  path: "/admin/announcements",
+  icon: Megaphone,
+},
     {
       label: "Settings",
       path: "/admin/settings",

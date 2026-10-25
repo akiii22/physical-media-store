@@ -12,7 +12,7 @@ import userRoutes from "./routes/userRoutes";
 import categoryRoutes from "./routes/categoryRoutes";
 import mediaTypeRoutes from "./routes/mediaTypeRoutes";
 import editEmailRoutes from "./routes/editEmailRoutes";
-
+import announcementRoutes from "./routes/announcementRoutes"
 dotenv.config();
 
 const app = express();
@@ -59,6 +59,7 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/admin/email-templates", editEmailRoutes);
+app.use("/api/announcements", announcementRoutes);
 
 // Start server
 app.listen(PORT, () => {

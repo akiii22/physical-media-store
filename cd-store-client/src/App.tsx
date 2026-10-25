@@ -35,6 +35,7 @@ import ShippingPolicy from "./pages/policies/ShippingPolicy";
 import ReturnRefundPolicy from "./pages/policies/ReturnRefundPolicy";
 import TermsAndConditions from "./pages/policies/TermsAndConditions";
 import FAQs from "./pages/policies/FAQs";
+import AdminAnnouncements from "./pages/admin/AdminAnnouncement";
 
 const App = () => {
   const location = useLocation();
@@ -182,6 +183,7 @@ const App = () => {
               />
 
             <Route path="/admin/sales-reports" element={<AdminSales />} />
+            <Route path="/admin/announcements" element={<AdminAnnouncements/>} />
 
             {/* ============================================
                 ADMIN-ONLY ROUTES
