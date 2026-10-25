@@ -10,8 +10,8 @@ if (!apiKey) {
 }
 
 const resend = new Resend(apiKey);
-const emailFrom = process.env.EMAIL_FROM || "onboarding@resend.dev";
-const STORE_NAME = "Physical Media Store";
+const emailFrom = process.env.EMAIL_FROM || "CDs Atbp. <onboarding@resend.dev>";
+const STORE_NAME = "CDs Atbp.";
 
 type PaymentInstructionsEmail = {
   to: string;
@@ -106,7 +106,6 @@ function getPaymentDetails(method: string): string {
  */
 function getPaymentQrAttachment(method: string): InlineQrAttachment | null {
   const normalizedMethod = normalizePaymentMethod(method);
-
   if (
     process.env.NODE_ENV === "production" ||
     process.env.PAYMENT_QR_MODE !== "demo"
@@ -154,7 +153,6 @@ function renderPaymentQr(
   if (normalizedMethod !== "GCASH" && normalizedMethod !== "MAYA") {
     return "";
   }
-
   if (!attachment) {
     return `
       <div style="margin:24px 0;padding:16px;border:1px dashed #d1d5db;border-radius:12px;text-align:center;color:#6b7280;">
@@ -205,6 +203,39 @@ function renderPlainTextMessage(message: string): string {
   return escapeHtml(message).replace(/\r?\n/g, "<br />");
 }
 
+function renderBrandedEmail(content: string, subject: string): string {
+  const safeSubject = escapeHtml(subject);
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${safeSubject}</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f0e9;font-family:Arial,Helvetica,sans-serif;color:#292722;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;">An update from ${escapeHtml(STORE_NAME)}.</div>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f4f0e9;padding:28px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;background:#ffffff;border:1px solid #e8e1d6;">
+        <tr><td align="center" style="background:#25241f;padding:28px 24px;color:#f9f5ed;">
+          <div style="font-size:11px;letter-spacing:3px;text-transform:uppercase;color:#d7b49a;">Curated music &amp; physical media</div>
+          <div style="font-family:Georgia,'Times New Roman',serif;font-size:30px;font-weight:bold;margin-top:8px;">${escapeHtml(STORE_NAME)}</div>
+          <div style="font-size:12px;color:#d9d5cd;margin-top:7px;">Records, memories, and everything in between.</div>
+        </td></tr>
+        <tr><td style="padding:30px 28px 34px;">
+          <div style="font-size:11px;letter-spacing:1.8px;color:#a45f3d;text-transform:uppercase;font-weight:bold;">A note from our store</div>
+          <h1 style="font-family:Georgia,'Times New Roman',serif;font-size:23px;line-height:1.35;font-weight:normal;margin:10px 0 22px;color:#292722;">${safeSubject}</h1>
+          <div style="font-size:15px;line-height:1.85;color:#4b4942;overflow-wrap:anywhere;">${content}</div>
+          <div style="margin-top:28px;padding-top:20px;border-top:1px solid #eee7dc;font-size:13px;line-height:1.7;color:#6f6a60;">Thank you for choosing ${escapeHtml(STORE_NAME)}. If you have questions, please reply to this email or contact our store.</div>
+        </td></tr>
+        <tr><td align="center" style="background:#f9f6f0;padding:20px 24px;font-size:11px;line-height:1.7;color:#777167;">${escapeHtml(STORE_NAME)} · Made for music lovers<br>Automated transactional message about your order.</td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
 async function sendHtmlEmail({
   to,
   subject,
@@ -231,11 +262,7 @@ async function sendHtmlEmail({
     from: emailFrom,
     to: [to],
     subject,
-    html: `
-      <div style="font-family:Arial,sans-serif;line-height:1.7;color:#222;max-width:600px;margin:0 auto;padding:16px;">
-        ${html}
-      </div>
-    `,
+    html: renderBrandedEmail(html, subject),
     ...(attachments?.length ? { attachments } : {}),
   });
 

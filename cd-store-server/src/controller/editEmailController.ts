@@ -13,16 +13,13 @@ export const getEmailTemplates = async (
       .order("name", { ascending: true });
 
     if (error) {
-      console.error("Failed to fetch email templates:", error);
       return res.status(500).json({
         message: "Failed to retrieve email templates.",
       });
     }
 
     return res.status(200).json({ data });
-  } catch (error) {
-    console.error("Email templates error:", error);
-
+  } catch {
     return res.status(500).json({
       message: "Internal server error.",
     });
@@ -71,8 +68,6 @@ export const updateEmailTemplate = async (
       .single();
 
     if (error) {
-      console.error("Failed to update email template:", error);
-
       return res.status(500).json({
         message: "Failed to update email template.",
       });
@@ -82,9 +77,7 @@ export const updateEmailTemplate = async (
       message: "Email template updated successfully.",
       data,
     });
-  } catch (error) {
-    console.error("Email template update error:", error);
-
+  } catch {
     return res.status(500).json({
       message: "Internal server error.",
     });

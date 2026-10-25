@@ -50,7 +50,7 @@ router.patch(
 router.patch(
   "/admin/:orderId/delivery-fee",
   requireAuth,
-  requireAdmin,
+  requireRole("ADMIN", "STAFF"),
   updateDeliveryFee
 );
 
