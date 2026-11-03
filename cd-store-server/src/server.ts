@@ -22,6 +22,7 @@ const PORT = process.env.PORT || 3000;
 const allowedOrigins = [
   "http://localhost:5173",
   "https://physical-media-store.vercel.app",
+  "https://cdsatbp.vercel.app",
 ];
 
 app.use(
