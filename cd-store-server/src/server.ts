@@ -21,6 +21,8 @@ const PORT = process.env.PORT || 3000;
 // Allowed frontend origins
 const allowedOrigins = [
   "http://localhost:5173",
+  "https://cdsatbp.com",
+  "https://www.cdsatbp.com",
   "https://physical-media-store.vercel.app",
   "https://cdsatbp.vercel.app",
 ];
