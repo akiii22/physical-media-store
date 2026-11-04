@@ -20,7 +20,7 @@ const AdminMobileHeader = ({
 
       <div className="ml-3">
         <p className="text-sm font-semibold text-gray-900">
-          Physical Media Store
+          CDSatbp
         </p>
 
         <p className="text-xs text-gray-500">

@@ -60,11 +60,13 @@ export const createOrder = async (
       });
     }
 
-    if (!["GCASH", "MAYA", "CARD"].includes(payment_method)) {
-      return res.status(400).json({
-        message: "Invalid payment method.",
-      });
-    }
+    const allowedPaymentMethods = ["GCASH", "BPI", "GOTYME"];
+
+if (!allowedPaymentMethods.includes(payment_method)) {
+  return res.status(400).json({
+    message: "Invalid payment method.",
+  });
+}
 
     if (
       delivery_method !== "STORE_PICKUP" &&

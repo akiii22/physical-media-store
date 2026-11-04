@@ -13,6 +13,6 @@ export type CreateOrderInput = {
   street_address?: string;
   postal_code?: string;
   delivery_method: "DELIVERY" | "STORE_PICKUP" | "STORE_PICKUP";
-  payment_method: "GCASH" | "MAYA" | "CARD";
+  payment_method: "GCASH" | "BPI" | "GOTYME";
   items: OrderItemInput[];
 };

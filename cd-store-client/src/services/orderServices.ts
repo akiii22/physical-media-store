@@ -18,9 +18,8 @@ export type DeliveryMethod =
 
 export type PaymentMethod =
   | "GCASH"
-  | "MAYA"
-  | "CARD";
-
+  | "BPI"
+  | "GOTYME";
 
 export type OrderStatus =
   | "PENDING_PAYMENT"

@@ -527,7 +527,7 @@ export const createDeliveryPayment = async (
     const normalizedMethod =
       typeof method === "string" ? method.trim().toUpperCase() : "";
 
-    if (!["GCASH", "MAYA", "CARD"].includes(normalizedMethod)) {
+    if (!["GCASH", "BPI", "GOTYME"].includes(normalizedMethod)) {
       return res.status(400).json({
         message: "Invalid payment method.",
       });
@@ -1011,6 +1011,128 @@ export const rejectPayment = async (
     });
   } catch (error) {
     console.error("Reject payment error:", error);
+
+    return res.status(500).json({
+      message: "Internal server error.",
+    });
+  }
+};
+
+export const getPaymentInstructions = async (
+  req: AuthenticatedRequest,
+  res: Response
+) => {
+  try {
+    const { orderId } = req.params;
+    const userId = req.user?.id;
+
+    if (!userId || !orderId) {
+      return res.status(400).json({
+        message: "Order ID is required.",
+      });
+    }
+
+    // Verify that the order belongs to the logged-in customer.
+    const { data: order, error: orderError } = await supabase
+      .from("orders")
+      .select("id, user_id")
+      .eq("id", orderId)
+      .maybeSingle();
+
+    if (orderError || !order) {
+      return res.status(404).json({
+        message: "Order not found.",
+      });
+    }
+
+    if (order.user_id !== userId) {
+      return res.status(403).json({
+        message: "You are not allowed to view these payment instructions.",
+      });
+    }
+
+    // Get the latest payment associated with this order.
+ const { data: payment, error: paymentError } = await supabase
+  .from("payments")
+  .select("id, method, amount, status, payment_type")
+  .eq("order_id", orderId)
+  .eq("payment_type", "PRODUCT")
+  .order("created_at", { ascending: false })
+  .limit(1)
+  .maybeSingle();
+    if (paymentError || !payment) {
+      return res.status(404).json({
+        message: "Payment information not found.",
+      });
+    }
+
+    const method = payment.method;
+
+    if (!["GCASH", "BPI", "GOTYME"].includes(method)) {
+      return res.status(400).json({
+        message: "Unsupported payment method.",
+      });
+    }
+
+    let instructions: {
+      account_name?: string;
+      account_number?: string;
+      qr_url?: string;
+    } = {};
+
+    if (method === "GCASH") {
+      const accountNumber = process.env.PAYMENT_GCASH_NUMBER;
+
+      if (!accountNumber) {
+        console.error("PAYMENT_GCASH_NUMBER is not configured.");
+
+        return res.status(500).json({
+          message: "GCash payment instructions are currently unavailable.",
+        });
+      }
+
+      instructions = {
+        account_name: "Allan M.",
+        account_number: accountNumber,
+      };
+    }
+
+    if (method === "BPI" || method === "GOTYME") {
+      const filePath =
+        method === "BPI" ? "bpi-qr.jpg" : "gotyme-qr.jpg";
+
+      const { data: signedUrlData, error: signedUrlError } =
+        await supabase.storage
+          .from("payment-qr")
+          .createSignedUrl(filePath, 60 * 10);
+
+      if (signedUrlError || !signedUrlData?.signedUrl) {
+        console.error("Payment QR signed URL error:", signedUrlError);
+
+        return res.status(500).json({
+          message: "Unable to retrieve the payment QR code.",
+        });
+      }
+
+      instructions = {
+        qr_url: signedUrlData.signedUrl,
+      };
+    }
+
+    return res.status(200).json({
+      message: "Payment instructions retrieved successfully.",
+      data: {
+        payment_id: payment.id,
+        order_id: order.id,
+        method,
+        amount: payment.amount,
+        status: payment.status,
+        payment_type: payment.payment_type,
+        ...instructions,
+      },
+    });
+  } catch (error) {
+    console.error("Get payment instructions error:", error);
 
     return res.status(500).json({
       message: "Internal server error.",

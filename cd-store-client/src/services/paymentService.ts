@@ -132,26 +132,25 @@ export const rejectPayment = async (
 };
 
 // Create delivery payment
+export type PaymentMethod = "GCASH" | "BPI" | "GOTYME";
+
 export const createDeliveryPayment = async (
   orderId: string,
-  method: "GCASH" | "MAYA" | "CARD"
+  method: PaymentMethod
 ) => {
   const token = await getAccessToken();
 
-  const response = await fetch(
-    `${API_URL}/payments/delivery`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        order_id: orderId,
-        method,
-      }),
-    }
-  );
+  const response = await fetch(`${API_URL}/payments/delivery`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      order_id: orderId,
+      method,
+    }),
+  });
 
   const data = await response.json();
 
@@ -162,4 +161,42 @@ export const createDeliveryPayment = async (
   }
 
   return data;
+};
+
+// Get payment instructions for an order
+export interface PaymentInstructions {
+  payment_id: string;
+  order_id: string;
+  method: "GCASH" | "BPI" | "GOTYME";
+  amount: number;
+  status: string;
+  payment_type: string;
+  account_name?: string;
+  account_number?: string;
+  qr_url?: string;
+}
+
+export const getPaymentInstructions = async (
+  orderId: string
+): Promise<PaymentInstructions> => {
+  const token = await getAccessToken();
+
+  const response = await fetch(
+    `${API_URL}/payments/${orderId}/instructions`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data.message || "Failed to retrieve payment instructions."
+    );
+  }
+
+  return data.data;
 };

@@ -14,7 +14,7 @@ const PaymentMethodComponent = ({
     {
       value: "GCASH" as const,
       title: "GCash",
-      description: "Pay using GCash.",
+      description: "Pay using your GCash account.",
       icon: (
         <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-sm font-bold text-blue-600">
           G
@@ -22,12 +22,22 @@ const PaymentMethodComponent = ({
       ),
     },
     {
-      value: "MAYA" as const,
-      title: "Maya",
-      description: "Pay using Maya.",
+      value: "BPI" as const,
+      title: "BPI",
+      description: "Scan the BPI QR code to pay.",
+      icon: (
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-red-50 text-sm font-bold text-red-600">
+          BPI
+        </div>
+      ),
+    },
+    {
+      value: "GOTYME" as const,
+      title: "GoTyme",
+      description: "Scan the GoTyme QR code to pay.",
       icon: (
         <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-green-50 text-sm font-bold text-green-600">
-          M
+          G
         </div>
       ),
     },
@@ -58,7 +68,6 @@ const PaymentMethodComponent = ({
                   : "border-gray-200 hover:border-gray-400 hover:bg-gray-50"
               }`}
             >
-              {/* Radio button */}
               <input
                 type="radio"
                 name="paymentMethod"
@@ -68,10 +77,8 @@ const PaymentMethodComponent = ({
                 className="sr-only"
               />
 
-              {/* Payment icon */}
               {method.icon}
 
-              {/* Payment information */}
               <div className="min-w-0 flex-1">
                 <span className="block font-medium text-gray-900">
                   {method.title}
@@ -82,7 +89,6 @@ const PaymentMethodComponent = ({
                 </span>
               </div>
 
-              {/* Selected indicator */}
               <div
                 className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition ${
                   isSelected
