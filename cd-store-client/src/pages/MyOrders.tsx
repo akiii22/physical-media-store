@@ -30,14 +30,15 @@ type Order = {
     unit_price: number;
   }[];
 
-  payments: {
-    id: string;
-    amount: number;
-    method: string;
-    status: string;
-    proof_url: string | null;
-    paid_at: string | null;
-  }[];
+payments: {
+  id: string;
+  amount: number;
+  method: string;
+  status: string;
+  payment_type: "PRODUCT" | "DELIVERY";
+  proof_url: string | null;
+  paid_at: string | null;
+}[];
 
   shipments: {
     id: string;
@@ -379,7 +380,9 @@ const MyOrders = () => {
         {!error && orders.length > 0 && (
           <div className="space-y-5">
             {orders.map((order) => {
-              const payment = order.payments?.[0];
+const payment = order.payments?.find(
+  (payment) => payment.payment_type === "PRODUCT"
+);
               const shipment = order.shipments?.[0];
 
               const StatusIcon = getStatusIcon(order.status);

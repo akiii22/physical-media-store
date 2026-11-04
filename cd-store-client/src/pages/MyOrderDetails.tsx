@@ -155,7 +155,7 @@ const MyOrderDetails = () => {
 
   // Delivery payment
   const [deliveryPaymentMethod, setDeliveryPaymentMethod] = useState<
-    "GCASH" | "MAYA" | "CARD"
+    "GCASH" | "BPI" | "GOTYME"
   >("GCASH");
 
   // IMPORTANT:
@@ -1161,26 +1161,15 @@ console.log("PRODUCT PAYMENT:", productPayment);
                       <select
                         value={deliveryPaymentMethod}
                         onChange={(event) => {
-                          setDeliveryPaymentMethod(
-                            event.target.value as
-                              | "GCASH"
-                              | "MAYA"
-                              | "CARD"
-                          );
-                        }}
+  setDeliveryPaymentMethod(
+    event.target.value as "GCASH" | "BPI" | "GOTYME"
+  );
+}}
                         className="mt-3 w-full rounded-lg border border-yellow-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-gray-900"
                       >
-                        <option value="GCASH">
-                          GCash
-                        </option>
-
-                        <option value="MAYA">
-                          Maya
-                        </option>
-
-                        <option value="CARD">
-                          Card
-                        </option>
+                       <option value="GCASH">GCash</option>
+<option value="BPI">BPI</option>
+<option value="GOTYME">GoTyme</option>
                       </select>
 
                       <button
