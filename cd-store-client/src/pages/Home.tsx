@@ -312,19 +312,19 @@ const Home = () => {
 
             <FeaturedImage
               label="BINI"
-              image="/Bini-08.jpg"
+              image="/Bini-02.webp"
               category="Featured Artist"
             />
 
             <FeaturedImage
               label="Regine Velasquez"
-              image="/regine.jpg"
+              image="/regine-01.jpg"
               category="Featured Artist"
             />
 
             <FeaturedImage
               label="Sarah Geronimo"
-              image="/Sarah.jpg"
+              image="/Sarah-2.jpg"
               category="Featured Artist"
             />
 

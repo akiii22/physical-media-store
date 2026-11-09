@@ -83,11 +83,11 @@ const Navbar = () => {
           />
 
           <span className="hidden text-lg font-bold tracking-tight text-gray-900 sm:block">
-            CDSATBP
+            CD's Atbp
           </span>
 
           <span className="text-lg font-bold tracking-tight text-gray-900 sm:hidden">
-            CDSATBP
+            CD's Atbp
           </span>
         </Link>
 
